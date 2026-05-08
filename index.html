@@ -255,6 +255,14 @@ Error generating stack: `+l.message+`
                 <div>
                     <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">วิดีโอของเรา (.mp4)</label>
                     <input type="file" id="up-video" accept="video/*" class="file-input">
+                    <div class="mt-2 bg-purple-50/70 border border-purple-100 rounded-2xl p-3 space-y-2">
+                        <div class="flex items-center justify-between gap-3 text-xs font-bold text-purple-500">
+                            <span>ฐานข้อมูลวิดีโอ</span>
+                            <span id="video-db-status">กำลังโหลด...</span>
+                        </div>
+                        <button onclick="resetVideo()" class="w-full py-2 bg-red-50 text-red-500 rounded-xl font-bold text-xs border border-red-100 hover:bg-red-100 transition-colors">ลบวิดีโอปัจจุบัน</button>
+                        <p class="text-[10px] leading-relaxed text-purple-300 text-center">ปุ่มนี้จะลบไฟล์วิดีโอหลักใน assets/video/main.mp4 ออกจากเว็บไซต์</p>
+                    </div>
                 </div>
                 <div>
                     <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">แกลเลอรี่ภาพ 📸</label>
@@ -367,6 +375,7 @@ Error generating stack: `+l.message+`
 
         let pin = "";
         let currentGalleryImages = [];
+        let currentVideoFile = null;
 
         function getImageUrl(file) {
             return `https://cdn.jsdelivr.net/gh/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}@main/${file.path}?v=${encodeURIComponent(file.sha || file.name)}`;
@@ -376,6 +385,28 @@ Error generating stack: `+l.message+`
             return files
                 .filter(f => f.name !== '.gitkeep' && /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name))
                 .sort((a, b) => b.name.localeCompare(a.name));
+        }
+
+        function updateVideoDatabaseStatus() {
+            const statusEl = document.getElementById('video-db-status');
+            if (statusEl) statusEl.innerText = currentVideoFile ? 'มีวิดีโอแล้ว' : 'ยังไม่มีวิดีโอ';
+        }
+
+        async function refreshVideoDatabaseFromGitHub() {
+            const statusEl = document.getElementById('video-db-status');
+            if (statusEl) statusEl.innerText = 'กำลังโหลด...';
+            try {
+                const url = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/assets/video/main.mp4`;
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `token ${GITHUB_CONFIG.token}` }
+                });
+                currentVideoFile = response.ok ? await response.json() : null;
+            } catch (error) {
+                console.error('Failed to refresh video database:', error);
+                currentVideoFile = null;
+            }
+            updateVideoDatabaseStatus();
+            return currentVideoFile;
         }
 
         function updatePhotoDatabaseCount() {
@@ -455,6 +486,7 @@ Error generating stack: `+l.message+`
         function openAdmin() {
             document.getElementById('admin-modal').style.display = 'flex';
             refreshPhotoDatabaseFromGitHub(false);
+            refreshVideoDatabaseFromGitHub();
         }
         function closeAdmin() { document.getElementById('admin-modal').style.display = 'none'; }
 
@@ -540,6 +572,47 @@ Error generating stack: `+l.message+`
             }
         }
 
+        async function resetVideo() {
+            await refreshVideoDatabaseFromGitHub();
+            if (!currentVideoFile) {
+                alert('ยังไม่มีวิดีโอให้ลบ');
+                return;
+            }
+            if(!confirm('คุณแน่ใจหรือไม่ที่จะลบวิดีโอปัจจุบัน? วิดีโอจะหายจากหน้าเว็บและไม่สามารถย้อนกลับได้')) return;
+
+            document.getElementById('loading-overlay').style.display = 'flex';
+            document.getElementById('loading-text').innerText = "กำลังลบวิดีโอ...";
+
+            try {
+                const deleteUrl = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${currentVideoFile.path}`;
+                const deleteResponse = await fetch(deleteUrl, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `token ${GITHUB_CONFIG.token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: 'Delete main video',
+                        sha: currentVideoFile.sha
+                    })
+                });
+                if (!deleteResponse.ok) throw new Error('ลบวิดีโอไม่สำเร็จ');
+                currentVideoFile = null;
+                updateVideoDatabaseStatus();
+                const videoElement = document.getElementById('main-video');
+                videoElement.removeAttribute('src');
+                videoElement.load();
+                document.getElementById('floating-video-container').style.display = 'none';
+                alert('ลบวิดีโอเรียบร้อยแล้ว! เว็บไซต์จะอัปเดตในอีกครู่หนึ่ง');
+            } catch (e) {
+                console.error('Delete video error:', e);
+                alert('เกิดข้อผิดพลาดในการลบวิดีโอ');
+            } finally {
+                document.getElementById('loading-overlay').style.display = 'none';
+                closeAdmin();
+            }
+        }
+
         async function uploadToGitHub(file, path) {
             const reader = new FileReader();
             return new Promise((resolve, reject) => {
@@ -581,10 +654,17 @@ Error generating stack: `+l.message+`
 
         async function loadAssets() {
             // Load Video
-            const videoUrl = `https://cdn.jsdelivr.net/gh/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}@main/assets/video/main.mp4`;
             const videoElement = document.getElementById('main-video');
-            videoElement.src = videoUrl;
-            document.getElementById('floating-video-container').style.display = 'block';
+            const videoFile = await refreshVideoDatabaseFromGitHub();
+            if (videoFile) {
+                const videoUrl = `https://cdn.jsdelivr.net/gh/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}@main/${videoFile.path}?v=${encodeURIComponent(videoFile.sha)}`;
+                videoElement.src = videoUrl;
+                document.getElementById('floating-video-container').style.display = 'block';
+            } else {
+                videoElement.removeAttribute('src');
+                videoElement.load();
+                document.getElementById('floating-video-container').style.display = 'none';
+            }
 
             // Load Audio
             const audioUrl = `https://cdn.jsdelivr.net/gh/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}@main/assets/audio/main.mp3`;
