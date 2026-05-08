@@ -51,6 +51,48 @@
         }
         .admin-box { background: white; width: 100%; max-width: 380px; border-radius: 25px; padding: 25px; }
         .file-input { display: block; width: 100%; padding: 10px; background: #fff5f7; border: 1px dashed #f9a8d4; border-radius: 12px; margin-bottom: 12px; font-size: 12px; color: #db2777; }
+
+        /* Photo Database Viewer */
+        #photo-db-modal, #photo-lightbox {
+            display: none; position: fixed; inset: 0; z-index: 6500;
+            background: rgba(80, 20, 40, 0.62); padding: 18px;
+            align-items: center; justify-content: center;
+        }
+        .photo-db-box {
+            width: min(920px, 100%); max-height: 86vh; overflow: hidden;
+            background: #fff; border-radius: 26px; box-shadow: 0 24px 70px rgba(219, 39, 119, 0.22);
+            display: flex; flex-direction: column;
+        }
+        .photo-db-header {
+            padding: 18px 20px; border-bottom: 1px solid #ffe4e6;
+            display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        }
+        .photo-db-grid {
+            padding: 18px; overflow-y: auto;
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px;
+        }
+        .photo-db-card {
+            position: relative; overflow: hidden; background: #fff5f7; border: 1px solid #ffe4e6;
+            border-radius: 16px; aspect-ratio: 1 / 1; cursor: pointer;
+            box-shadow: 0 8px 18px rgba(244, 114, 182, 0.08); transition: transform 0.18s ease, box-shadow 0.18s ease;
+        }
+        .photo-db-card:hover { transform: translateY(-2px); box-shadow: 0 12px 24px rgba(244, 114, 182, 0.18); }
+        .photo-db-card img { width: 100%; height: 100%; object-fit: cover; }
+        .photo-db-index {
+            position: absolute; top: 8px; left: 8px; min-width: 26px; height: 26px; padding: 0 8px;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: rgba(255, 255, 255, 0.92); color: #db2777; border-radius: 999px;
+            font-weight: 800; font-size: 12px;
+        }
+        .photo-empty-state { padding: 46px 18px; text-align: center; color: #f472b6; font-weight: 700; }
+        .photo-item { cursor: pointer; }
+        .photo-item:hover { transform: rotate(var(--rot)) translateY(-4px) scale(1.02); }
+        #photo-lightbox img { max-width: min(92vw, 900px); max-height: 82vh; border-radius: 24px; box-shadow: 0 24px 70px rgba(0,0,0,0.28); border: 6px solid white; }
+        .lightbox-close {
+            position: absolute; top: 18px; right: 18px; width: 44px; height: 44px; border-radius: 999px;
+            background: white; color: #db2777; font-size: 20px; font-weight: 800;
+            display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 22px rgba(0,0,0,0.15);
+        }
     
         /* Settings Icon (Lock screen only) */
         .admin-trigger-minimal {
@@ -226,11 +268,37 @@ Error generating stack: `+l.message+`
                     <button onclick="saveAdmin()" class="flex-1 py-3 bg-pink-500 text-white rounded-xl font-bold shadow-lg shadow-pink-100">บันทึก</button>
                     <button onclick="closeAdmin()" class="px-5 py-3 bg-gray-100 text-gray-400 rounded-xl font-bold">ปิด</button>
                 </div>
-                <div class="pt-2">
-                    <button onclick="resetPhotos()" class="w-full py-2 bg-red-50 text-red-400 rounded-xl font-bold text-xs border border-red-100 hover:bg-red-100 transition-colors">ล้างรูปภาพทั้งหมดในแกลเลอรี่</button>
+                <div class="bg-pink-50/70 border border-pink-100 rounded-2xl p-3 space-y-2">
+                    <div class="flex items-center justify-between gap-3 text-xs font-bold text-pink-500">
+                        <span>ฐานข้อมูลรูปภาพ</span>
+                        <span id="photo-db-count">กำลังโหลด...</span>
+                    </div>
+                    <button onclick="openPhotoDatabase()" class="w-full py-2 bg-white text-pink-500 rounded-xl font-bold text-xs border border-pink-100 hover:bg-pink-100 transition-colors">ดูรูปภาพทั้งหมดแบบเรียงกัน</button>
+                    <button onclick="resetPhotos()" class="w-full py-2 bg-red-50 text-red-500 rounded-xl font-bold text-xs border border-red-100 hover:bg-red-100 transition-colors">รีเซ็ตฐานข้อมูลรูปภาพทั้งหมด</button>
+                    <p class="text-[10px] leading-relaxed text-pink-300 text-center">ปุ่มรีเซ็ตจะลบเฉพาะไฟล์รูปในโฟลเดอร์ images และเก็บไฟล์ระบบไว้เหมือนเดิม</p>
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Photo Database Modal -->
+    <div id="photo-db-modal" onclick="closePhotoDatabase(event)">
+        <div class="photo-db-box" onclick="event.stopPropagation()">
+            <div class="photo-db-header">
+                <div>
+                    <h3 class="font-cute text-3xl text-pink-600 leading-none">ฐานข้อมูลรูปภาพ 📸</h3>
+                    <p id="photo-db-subtitle" class="text-xs text-pink-300 font-bold mt-1">รูปทั้งหมดจะเรียงตามวันที่อัปโหลดล่าสุดก่อน</p>
+                </div>
+                <button onclick="closePhotoDatabase()" class="px-4 py-2 bg-pink-50 text-pink-500 rounded-xl font-bold text-sm hover:bg-pink-100">ปิด</button>
+            </div>
+            <div id="photo-db-grid" class="photo-db-grid"></div>
+        </div>
+    </div>
+
+    <!-- Photo Lightbox -->
+    <div id="photo-lightbox" onclick="closePhotoLightbox()">
+        <button class="lightbox-close" onclick="closePhotoLightbox(event)">×</button>
+        <img id="photo-lightbox-img" src="" alt="รูปภาพความทรงจำ">
     </div>
 
     <!-- Main Content -->
@@ -298,9 +366,96 @@ Error generating stack: `+l.message+`
         };
 
         let pin = "";
+        let currentGalleryImages = [];
+
+        function getImageUrl(file) {
+            return `https://cdn.jsdelivr.net/gh/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}@main/${file.path}?v=${encodeURIComponent(file.sha || file.name)}`;
+        }
+
+        function sortPhotoFiles(files) {
+            return files
+                .filter(f => f.name !== '.gitkeep' && /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name))
+                .sort((a, b) => b.name.localeCompare(a.name));
+        }
+
+        function updatePhotoDatabaseCount() {
+            const countEl = document.getElementById('photo-db-count');
+            const subtitleEl = document.getElementById('photo-db-subtitle');
+            if (countEl) countEl.innerText = `${currentGalleryImages.length} รูป`;
+            if (subtitleEl) subtitleEl.innerText = currentGalleryImages.length
+                ? `มีรูปทั้งหมด ${currentGalleryImages.length} รูป เรียงตามวันที่อัปโหลดล่าสุดก่อน`
+                : 'ยังไม่มีรูปในฐานข้อมูล';
+        }
+
+        async function refreshPhotoDatabaseFromGitHub(showLoadingText = false) {
+            const countEl = document.getElementById('photo-db-count');
+            const dbGrid = document.getElementById('photo-db-grid');
+            if (countEl) countEl.innerText = 'กำลังโหลด...';
+            if (showLoadingText && dbGrid) {
+                dbGrid.innerHTML = `<div class="photo-empty-state" style="grid-column: 1 / -1;">กำลังโหลดรูปภาพ...</div>`;
+            }
+            try {
+                const url = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/images`;
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `token ${GITHUB_CONFIG.token}` }
+                });
+                const files = await response.json();
+                currentGalleryImages = Array.isArray(files) ? sortPhotoFiles(files) : [];
+            } catch (error) {
+                console.error('Failed to refresh photo database:', error);
+                currentGalleryImages = [];
+            }
+            updatePhotoDatabaseCount();
+            return currentGalleryImages;
+        }
+
+        function renderPhotoDatabase() {
+            const dbGrid = document.getElementById('photo-db-grid');
+            if (!dbGrid) return;
+            dbGrid.innerHTML = "";
+            updatePhotoDatabaseCount();
+            if (!currentGalleryImages.length) {
+                dbGrid.innerHTML = `<div class="photo-empty-state" style="grid-column: 1 / -1;">ยังไม่มีรูปในฐานข้อมูลรูปภาพ</div>`;
+                return;
+            }
+            currentGalleryImages.forEach((file, index) => {
+                const card = document.createElement('button');
+                card.type = 'button';
+                card.className = 'photo-db-card';
+                const imageUrl = getImageUrl(file);
+                card.innerHTML = `<img src="${imageUrl}" loading="lazy" alt="รูปความทรงจำ ${index + 1}"><span class="photo-db-index">${index + 1}</span>`;
+                card.onclick = () => openPhotoLightbox(imageUrl);
+                dbGrid.appendChild(card);
+            });
+        }
+
+        async function openPhotoDatabase() {
+            document.getElementById('photo-db-modal').style.display = 'flex';
+            await refreshPhotoDatabaseFromGitHub(true);
+            renderPhotoDatabase();
+        }
+
+        function closePhotoDatabase(event) {
+            if (event) event.stopPropagation();
+            document.getElementById('photo-db-modal').style.display = 'none';
+        }
+
+        function openPhotoLightbox(imageUrl) {
+            document.getElementById('photo-lightbox-img').src = imageUrl;
+            document.getElementById('photo-lightbox').style.display = 'flex';
+        }
+
+        function closePhotoLightbox(event) {
+            if (event) event.stopPropagation();
+            document.getElementById('photo-lightbox').style.display = 'none';
+            document.getElementById('photo-lightbox-img').src = "";
+        }
 
         // Admin functionality
-        function openAdmin() { document.getElementById('admin-modal').style.display = 'flex'; }
+        function openAdmin() {
+            document.getElementById('admin-modal').style.display = 'flex';
+            refreshPhotoDatabaseFromGitHub(false);
+        }
         function closeAdmin() { document.getElementById('admin-modal').style.display = 'none'; }
 
         async function saveAdmin() {
@@ -341,10 +496,10 @@ Error generating stack: `+l.message+`
         }
 
         async function resetPhotos() {
-            if(!confirm('คุณแน่ใจหรือไม่ที่จะลบรูปภาพทั้งหมดในแกลเลอรี่? การกระทำนี้ไม่สามารถย้อนกลับได้')) return;
+            if(!confirm('คุณแน่ใจหรือไม่ที่จะรีเซ็ตฐานข้อมูลรูปภาพทั้งหมด? รูปภาพในแกลเลอรี่จะถูกลบทั้งหมดและไม่สามารถย้อนกลับได้')) return;
             
             document.getElementById('loading-overlay').style.display = 'flex';
-            document.getElementById('loading-text').innerText = "กำลังล้างรูปภาพ...";
+            document.getElementById('loading-text').innerText = "กำลังรีเซ็ตฐานข้อมูลรูปภาพ...";
             
             try {
                 const url = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/images`;
@@ -354,27 +509,31 @@ Error generating stack: `+l.message+`
                 const files = await response.json();
                 
                 if (Array.isArray(files)) {
-                    const images = files.filter(f => f.name !== '.gitkeep');
+                    const images = sortPhotoFiles(files);
                     for (let file of images) {
+                        document.getElementById('loading-text').innerText = `กำลังลบรูป ${images.indexOf(file) + 1}/${images.length}...`;
                         const deleteUrl = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${file.path}`;
-                        await fetch(deleteUrl, {
+                        const deleteResponse = await fetch(deleteUrl, {
                             method: 'DELETE',
                             headers: {
                                 'Authorization': `token ${GITHUB_CONFIG.token}`,
                                 'Content-Type': 'application/json'
                             },
                             body: JSON.stringify({
-                                message: `Delete photo: ${file.name}`,
+                                message: `Reset photo database: ${file.name}`,
                                 sha: file.sha
                             })
                         });
+                        if (!deleteResponse.ok) throw new Error(`ลบรูป ${file.name} ไม่สำเร็จ`);
                     }
                 }
-                alert('ล้างรูปภาพเรียบร้อยแล้ว!');
+                currentGalleryImages = [];
+                renderPhotoDatabase();
+                alert('รีเซ็ตฐานข้อมูลรูปภาพเรียบร้อยแล้ว!');
                 loadAssets();
             } catch (e) {
                 console.error("Reset error:", e);
-                alert('เกิดข้อผิดพลาดในการล้างรูปภาพ');
+                alert('เกิดข้อผิดพลาดในการรีเซ็ตฐานข้อมูลรูปภาพ');
             } finally {
                 document.getElementById('loading-overlay').style.display = 'none';
                 closeAdmin();
@@ -444,16 +603,25 @@ Error generating stack: `+l.message+`
                     const grid = document.getElementById('gallery-grid');
                     grid.innerHTML = "";
                     
-                    const images = files.filter(f => f.name !== '.gitkeep' && /\.(jpg|jpeg|png|gif|webp)$/i.test(f.name))
-                                       .sort((a, b) => b.name.localeCompare(a.name));
+                    const images = sortPhotoFiles(files);
+                    currentGalleryImages = images;
+                    updatePhotoDatabaseCount();
+                    renderPhotoDatabase();
+
+                    if (!images.length) {
+                        grid.innerHTML = `<div class="photo-empty-state" style="grid-column: 1 / -1;">ยังไม่มีรูปในแกลเลอรี่</div>`;
+                        return;
+                    }
 
                     images.forEach((file, index) => {
-                        const div = document.createElement('div');
+                        const div = document.createElement('button');
+                        div.type = 'button';
                         const rot = (index % 2 === 0 ? "-3deg" : "3deg");
                         div.className = "photo-item";
                         div.style.setProperty('--rot', rot);
-                        const imageUrl = `https://cdn.jsdelivr.net/gh/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}@main/${file.path}`;
-                        div.innerHTML = `<img src="${imageUrl}" loading="lazy">`;
+                        const imageUrl = getImageUrl(file);
+                        div.innerHTML = `<img src="${imageUrl}" loading="lazy" alt="รูปความทรงจำ ${index + 1}">`;
+                        div.onclick = () => openPhotoLightbox(imageUrl);
                         grid.appendChild(div);
                     });
                 }
