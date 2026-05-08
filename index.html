@@ -191,7 +191,7 @@
             bottom: 30px;
             left: 30px;
             z-index: 2000;
-            display: none !important; /* Force hide on start */
+            display: flex;
             align-items: center;
             gap: 15px;
             background: rgba(255, 255, 255, 0.9);
@@ -1200,9 +1200,7 @@ Error generating stack: `+l.message+`
                 onComplete: () => { document.getElementById('lock-screen').remove(); }
             });
             document.getElementById('main-content').classList.remove('hidden');
-            // Show CD Player with !important override
-            const cdPlayer = document.getElementById('cd-player');
-            cdPlayer.style.setProperty('display', 'flex', 'important');
+            document.getElementById('cd-player').style.display = 'flex';
             gsap.to("#main-content", { opacity: 1, duration: 1 });
             startTimer();
             loadAssets();
