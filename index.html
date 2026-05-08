@@ -9,20 +9,18 @@
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js?v=2"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     
-    <link href="https://fonts.cdnfonts.com/css/cossette-texte" rel="stylesheet">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        @font-face {
-            font-family: 'Cossette Texte';
-            src: local('Cossette Texte');
+        @import url('https://fonts.cdnfonts.com/css/cossette-texte');
+        
+        * {
+            font-family: 'Cossette Texte', sans-serif !important;
+            font-weight: 700 !important; /* Force Bold as requested */
         }
         
-        .cossette-texte-regular { font-family: 'Cossette Texte', sans-serif; font-weight: 400; }
-        .cossette-texte-bold { font-family: 'Cossette Texte', sans-serif; font-weight: 700; }
+        .font-cute { font-family: 'Cossette Texte', sans-serif !important; font-weight: 700 !important; }
     
-    
-    <style>
-        
-        .font-cute { font-family: 'Gaegu', cursive; }
         
         /* Lock Screen Keypad */
         .key-btn {
@@ -133,6 +131,7 @@
             z-index: 6000; align-items: center; justify-content: center; flex-direction: column;
         }
     
+        
         #floating-video-container {
             position: fixed;
             bottom: 20px;
@@ -140,8 +139,10 @@
             width: 280px;
             z-index: 1000;
             cursor: default;
-            transition: transform 0.3s ease;
+            transition: none; /* Remove transition to keep it locked */
+            pointer-events: auto;
         }
+    
         
         .video-nav-btn {
             position: absolute;
@@ -185,7 +186,6 @@
         
         /* CD Player Styles Improved */
         .cd-player-container {
-            display: none;
             position: fixed;
             bottom: 30px;
             left: 30px;
@@ -358,7 +358,7 @@ Error generating stack: `+l.message+`
             <div class="space-y-4">
                 
                 <div>
-                    <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">วิดีโอของเรา (สูงสุด 5 อัน)</label>
+                    <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">วิดีโอที่คบกัน (สูงสุด 5 อัน)</label>
                     <div class="space-y-2 mt-1">
                         <input type="file" id="up-video-1" accept="video/*" class="file-input" placeholder="วิดีโอที่ 1">
                         <input type="file" id="up-video-2" accept="video/*" class="file-input" placeholder="วิดีโอที่ 2">
@@ -485,7 +485,7 @@ Error generating stack: `+l.message+`
 
         <!-- Gallery -->
         <section class="px-6 mb-24">
-            <h3 class="font-cute text-3xl text-center text-pink-600 mb-8">แกลเลอรี่ของเรา 📸</h3>
+            <h3 class="font-cute text-3xl text-center text-pink-600 mb-8">รูปที่คบกัน 📸</h3>
             <div id="gallery-grid" class="grid grid-cols-2 gap-5 max-w-sm mx-auto">
                 <!-- User Photos -->
             </div>
