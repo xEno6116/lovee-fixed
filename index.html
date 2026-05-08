@@ -154,6 +154,52 @@
             display: none; position: fixed; inset: 0; background: rgba(255, 255, 255, 0.8);
             z-index: 6000; align-items: center; justify-content: center; flex-direction: column;
         }
+    
+        #floating-video-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 280px;
+            z-index: 1000;
+            cursor: move;
+            transition: transform 0.3s ease;
+        }
+        .video-nav-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.7);
+            color: #db2777;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            z-index: 10;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: all 0.2s;
+        }
+        .video-nav-btn:hover { background: white; transform: translateY(-50%) scale(1.1); }
+        .video-nav-prev { left: -15px; }
+        .video-nav-next { right: -15px; }
+        .video-counter {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #db2777;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+    
     </style>
 </head>
 <body>
@@ -252,26 +298,36 @@ Error generating stack: `+l.message+`
         <div class="admin-box">
             <h3 class="font-cute text-2xl text-pink-600 mb-5 text-center">จัดการความทรงจำ ⚙️</h3>
             <div class="space-y-4">
+                
                 <div>
-                    <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">วิดีโอของเรา (.mp4)</label>
-                    <input type="file" id="up-video" accept="video/*" class="file-input">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">วิดีโอของเรา (สูงสุด 5 อัน)</label>
+                    <div class="space-y-2 mt-1">
+                        <input type="file" id="up-video-1" accept="video/*" class="file-input" placeholder="วิดีโอที่ 1">
+                        <input type="file" id="up-video-2" accept="video/*" class="file-input" placeholder="วิดีโอที่ 2">
+                        <input type="file" id="up-video-3" accept="video/*" class="file-input" placeholder="วิดีโอที่ 3">
+                        <input type="file" id="up-video-4" accept="video/*" class="file-input" placeholder="วิดีโอที่ 4">
+                        <input type="file" id="up-video-5" accept="video/*" class="file-input" placeholder="วิดีโอที่ 5">
+                    </div>
                     <div class="mt-2 bg-purple-50/70 border border-purple-100 rounded-2xl p-3 space-y-2">
                         <div class="flex items-center justify-between gap-3 text-xs font-bold text-purple-500">
                             <span>ฐานข้อมูลวิดีโอ</span>
                             <span id="video-db-status">กำลังโหลด...</span>
                         </div>
-                        <button onclick="resetVideo()" class="w-full py-2 bg-red-50 text-red-500 rounded-xl font-bold text-xs border border-red-100 hover:bg-red-100 transition-colors">ลบวิดีโอปัจจุบัน</button>
-                        <p class="text-[10px] leading-relaxed text-purple-300 text-center">ปุ่มนี้จะลบไฟล์วิดีโอหลักใน assets/video/main.mp4 ออกจากเว็บไซต์</p>
+                        <button onclick="resetVideo()" class="w-full py-2 bg-red-50 text-red-500 rounded-xl font-bold text-xs border border-red-100 hover:bg-red-100 transition-colors">ลบวิดีโอทั้งหมด</button>
                     </div>
                 </div>
+    
                 <div>
                     <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">แกลเลอรี่ภาพ 📸</label>
                     <input type="file" id="up-photos" accept="image/*" multiple class="file-input">
                 </div>
+                
                 <div>
-                    <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">เพลงรัก (.mp3)</label>
-                    <input type="file" id="up-music" accept="audio/*" class="file-input">
+                    <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">เพลงรัก (ไฟล์ .mp3 หรือ ลิงก์)</label>
+                    <input type="file" id="up-music" accept="audio/*" class="file-input mb-2">
+                    <input type="text" id="music-link" class="file-input" placeholder="หรือวางลิงก์เพลงที่นี่ (เช่น https://.../song.mp3)">
                 </div>
+    
                 <div class="flex gap-3 pt-2">
                     <button onclick="saveAdmin()" class="flex-1 py-3 bg-pink-500 text-white rounded-xl font-bold shadow-lg shadow-pink-100">บันทึก</button>
                     <button onclick="closeAdmin()" class="px-5 py-3 bg-gray-100 text-gray-400 rounded-xl font-bold">ปิด</button>
@@ -334,12 +390,17 @@ Error generating stack: `+l.message+`
         </header>
 
         <!-- Floating Video Container -->
+        
         <div id="floating-video-container">
             <div class="resize-handle"><i class="fas fa-expand-alt"></i></div>
+            <div class="video-counter" id="video-counter">1/1</div>
+            <button class="video-nav-btn video-nav-prev" onclick="changeVideo(-1)"><i class="fas fa-chevron-left"></i></button>
+            <button class="video-nav-btn video-nav-next" onclick="changeVideo(1)"><i class="fas fa-chevron-right"></i></button>
             <div class="video-wrapper">
                 <video id="main-video" controls playsinline loop></video>
             </div>
         </div>
+    
 
         <!-- Message Section -->
         <section class="px-6 mb-12">
@@ -375,7 +436,10 @@ Error generating stack: `+l.message+`
 
         let pin = "";
         let currentGalleryImages = [];
-        let currentVideoFile = null;
+        
+        let currentVideos = [];
+        let currentVideoIndex = 0;
+    
 
         function getImageUrl(file) {
             return `https://cdn.jsdelivr.net/gh/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}@main/${file.path}?v=${encodeURIComponent(file.sha || file.name)}`;
@@ -392,22 +456,25 @@ Error generating stack: `+l.message+`
             if (statusEl) statusEl.innerText = currentVideoFile ? 'มีวิดีโอแล้ว' : 'ยังไม่มีวิดีโอ';
         }
 
+        
         async function refreshVideoDatabaseFromGitHub() {
             const statusEl = document.getElementById('video-db-status');
             if (statusEl) statusEl.innerText = 'กำลังโหลด...';
             try {
-                const url = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/assets/video/main.mp4`;
+                const url = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/assets/video`;
                 const response = await fetch(url, {
                     headers: { 'Authorization': `token ${GITHUB_CONFIG.token}` }
                 });
-                currentVideoFile = response.ok ? await response.json() : null;
+                const files = await response.json();
+                currentVideos = Array.isArray(files) ? files.filter(f => f.name.startsWith('video') && f.name.endsWith('.mp4')).sort((a,b) => a.name.localeCompare(b.name)) : [];
             } catch (error) {
                 console.error('Failed to refresh video database:', error);
-                currentVideoFile = null;
+                currentVideos = [];
             }
-            updateVideoDatabaseStatus();
-            return currentVideoFile;
+            if (statusEl) statusEl.innerText = currentVideos.length > 0 ? `มีวิดีโอ ${currentVideos.length} อัน` : 'ยังไม่มีวิดีโอ';
+            return currentVideos;
         }
+    
 
         function updatePhotoDatabaseCount() {
             const countEl = document.getElementById('photo-db-count');
@@ -482,6 +549,41 @@ Error generating stack: `+l.message+`
             document.getElementById('photo-lightbox-img').src = "";
         }
 
+        
+        function changeVideo(direction) {
+            if (currentVideos.length <= 1) return;
+            currentVideoIndex = (currentVideoIndex + direction + currentVideos.length) % currentVideos.length;
+            updateVideoPlayer();
+        }
+
+        function updateVideoPlayer() {
+            const videoElement = document.getElementById('main-video');
+            const counterEl = document.getElementById('video-counter');
+            const prevBtn = document.querySelector('.video-nav-prev');
+            const nextBtn = document.querySelector('.video-nav-next');
+
+            if (currentVideos.length > 0) {
+                const video = currentVideos[currentVideoIndex];
+                const videoUrl = `https://cdn.jsdelivr.net/gh/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}@main/${video.path}?v=${encodeURIComponent(video.sha)}`;
+                videoElement.src = videoUrl;
+                counterEl.innerText = `${currentVideoIndex + 1}/${currentVideos.length}`;
+                counterEl.style.display = 'block';
+                
+                if (currentVideos.length > 1) {
+                    prevBtn.style.display = 'flex';
+                    nextBtn.style.display = 'flex';
+                } else {
+                    prevBtn.style.display = 'none';
+                    nextBtn.style.display = 'none';
+                }
+                document.getElementById('floating-video-container').style.display = 'block';
+            } else {
+                videoElement.removeAttribute('src');
+                videoElement.load();
+                document.getElementById('floating-video-container').style.display = 'none';
+            }
+        }
+    
         // Admin functionality
         function openAdmin() {
             document.getElementById('admin-modal').style.display = 'flex';
@@ -490,15 +592,44 @@ Error generating stack: `+l.message+`
         }
         function closeAdmin() { document.getElementById('admin-modal').style.display = 'none'; }
 
+        
         async function saveAdmin() {
-            const vFile = document.getElementById('up-video').files[0];
+            const videoInputs = [
+                document.getElementById('up-video-1'),
+                document.getElementById('up-video-2'),
+                document.getElementById('up-video-3'),
+                document.getElementById('up-video-4'),
+                document.getElementById('up-video-5')
+            ];
             const mFile = document.getElementById('up-music').files[0];
+            const mLink = document.getElementById('music-link').value.trim();
             const pFiles = document.getElementById('up-photos').files;
 
-            if(vFile || mFile || pFiles.length > 0) {
+            let hasChanges = mFile || mLink || pFiles.length > 0;
+            videoInputs.forEach(input => { if(input.files[0]) hasChanges = true; });
+
+            if(hasChanges) {
                 document.getElementById('loading-overlay').style.display = 'flex';
                 
-                if(vFile) {
+                // Handle Videos
+                for(let i=0; i<videoInputs.length; i++) {
+                    const vFile = videoInputs[i].files[0];
+                    if(vFile) {
+                        document.getElementById('loading-text').innerText = `กำลังอัปโหลดวิดีโอที่ ${i+1}...`;
+                        await uploadToGitHub(vFile, `assets/video/video${i+1}.mp4`);
+                    }
+                }
+                
+                // Handle Music
+                if(mFile) {
+                    document.getElementById('loading-text').innerText = "กำลังอัปโหลดเพลง...";
+                    await uploadToGitHub(mFile, 'assets/audio/main.mp3');
+                } else if(mLink) {
+                    document.getElementById('loading-text').innerText = "กำลังบันทึกลิงก์เพลง...";
+                    const encodedLink = btoa(unescape(encodeURIComponent(mLink)));
+                    await uploadTextToGitHub(mLink, 'assets/audio/music_link.txt');
+                }
+    
                     document.getElementById('loading-text').innerText = "กำลังอัปโหลดวิดีโอ...";
                     await uploadToGitHub(vFile, 'assets/video/main.mp4');
                 }
@@ -572,38 +703,36 @@ Error generating stack: `+l.message+`
             }
         }
 
+        
         async function resetVideo() {
             await refreshVideoDatabaseFromGitHub();
-            if (!currentVideoFile) {
+            if (currentVideos.length === 0) {
                 alert('ยังไม่มีวิดีโอให้ลบ');
                 return;
             }
-            if(!confirm('คุณแน่ใจหรือไม่ที่จะลบวิดีโอปัจจุบัน? วิดีโอจะหายจากหน้าเว็บและไม่สามารถย้อนกลับได้')) return;
+            if(!confirm(`คุณแน่ใจหรือไม่ที่จะลบวิดีโอทั้งหมด (${currentVideos.length} อัน)? วิดีโอจะหายจากหน้าเว็บและไม่สามารถย้อนกลับได้`)) return;
 
             document.getElementById('loading-overlay').style.display = 'flex';
-            document.getElementById('loading-text').innerText = "กำลังลบวิดีโอ...";
-
+            
             try {
-                const deleteUrl = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${currentVideoFile.path}`;
-                const deleteResponse = await fetch(deleteUrl, {
-                    method: 'DELETE',
-                    headers: {
-                        'Authorization': `token ${GITHUB_CONFIG.token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        message: 'Delete main video',
-                        sha: currentVideoFile.sha
-                    })
-                });
-                if (!deleteResponse.ok) throw new Error('ลบวิดีโอไม่สำเร็จ');
-                currentVideoFile = null;
-                updateVideoDatabaseStatus();
-                const videoElement = document.getElementById('main-video');
-                videoElement.removeAttribute('src');
-                videoElement.load();
-                document.getElementById('floating-video-container').style.display = 'none';
-                alert('ลบวิดีโอเรียบร้อยแล้ว! เว็บไซต์จะอัปเดตในอีกครู่หนึ่ง');
+                for (let video of currentVideos) {
+                    document.getElementById('loading-text').innerText = `กำลังลบ ${video.name}...`;
+                    const deleteUrl = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${video.path}`;
+                    await fetch(deleteUrl, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `token ${GITHUB_CONFIG.token}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: `Delete video: ${video.name}`,
+                            sha: video.sha
+                        })
+                    });
+                }
+                currentVideos = [];
+                updateVideoPlayer();
+                alert('ลบวิดีโอทั้งหมดเรียบร้อยแล้ว!');
             } catch (e) {
                 console.error('Delete video error:', e);
                 alert('เกิดข้อผิดพลาดในการลบวิดีโอ');
@@ -612,7 +741,36 @@ Error generating stack: `+l.message+`
                 closeAdmin();
             }
         }
+    
+        }
 
+        
+        async function uploadTextToGitHub(text, path) {
+            const content = btoa(unescape(encodeURIComponent(text)));
+            const url = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${path}`;
+            let sha = null;
+            const checkRes = await fetch(url, {
+                headers: { 'Authorization': `token ${GITHUB_CONFIG.token}` }
+            });
+            if(checkRes.ok) {
+                const data = await checkRes.json();
+                sha = data.sha;
+            }
+            const response = await fetch(url, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `token ${GITHUB_CONFIG.token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: `Update text asset: ${path}`,
+                    content: content,
+                    sha: sha
+                })
+            });
+            return await response.json();
+        }
+    
         async function uploadToGitHub(file, path) {
             const reader = new FileReader();
             return new Promise((resolve, reject) => {
@@ -652,23 +810,28 @@ Error generating stack: `+l.message+`
             });
         }
 
+        
         async function loadAssets() {
-            // Load Video
-            const videoElement = document.getElementById('main-video');
-            const videoFile = await refreshVideoDatabaseFromGitHub();
-            if (videoFile) {
-                const videoUrl = `https://cdn.jsdelivr.net/gh/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}@main/${videoFile.path}?v=${encodeURIComponent(videoFile.sha)}`;
-                videoElement.src = videoUrl;
-                document.getElementById('floating-video-container').style.display = 'block';
-            } else {
-                videoElement.removeAttribute('src');
-                videoElement.load();
-                document.getElementById('floating-video-container').style.display = 'none';
-            }
+            // Load Videos
+            await refreshVideoDatabaseFromGitHub();
+            currentVideoIndex = 0;
+            updateVideoPlayer();
 
             // Load Audio
-            const audioUrl = `https://cdn.jsdelivr.net/gh/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}@main/assets/audio/main.mp3`;
+            let audioUrl = `https://cdn.jsdelivr.net/gh/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}@main/assets/audio/main.mp3`;
+            try {
+                const linkRes = await fetch(`https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/main/assets/audio/music_link.txt?v=${Date.now()}`);
+                if(linkRes.ok) {
+                    const linkText = await linkRes.text();
+                    if(linkText.trim().startsWith('http')) {
+                        audioUrl = linkText.trim();
+                    }
+                }
+            } catch(e) { console.log("No music link file found, using default mp3"); }
+            
             const audioElement = document.getElementById('main-audio');
+            audioElement.src = audioUrl;
+    
             audioElement.src = audioUrl;
 
             // Load Gallery
