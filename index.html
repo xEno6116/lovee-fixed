@@ -177,6 +177,7 @@
     
         /* CD Player Styles */
         .cd-player-container {
+            display: none; /* Hidden by default, shown after unlock */
             position: fixed;
             bottom: 20px;
             left: 20px;
@@ -261,7 +262,7 @@
         
         @keyframes spin {
             from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+            to { transform: rotate(360deg); }); }
         }
         .playing .cd-disc { animation-play-state: running; }
     
@@ -731,13 +732,6 @@ Error generating stack: `+l.message+`
                 cdPlayer.classList.remove('playing');
             }
         }
-    
-            try {
-                if (typeof confetti === 'function') {
-                    confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
-                }
-            } catch (e) { console.error("Confetti error:", e); }
-        }
 
         async function resetPhotos() {
             if(!confirm('คุณแน่ใจหรือไม่ที่จะรีเซ็ตฐานข้อมูลรูปภาพทั้งหมด? รูปภาพในแกลเลอรี่จะถูกลบทั้งหมดและไม่สามารถย้อนกลับได้')) return;
@@ -822,10 +816,7 @@ Error generating stack: `+l.message+`
                 closeAdmin();
             }
         }
-    
-        }
 
-        
         async function uploadTextToGitHub(text, path) {
             const content = btoa(unescape(encodeURIComponent(text)));
             const url = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${path}`;
@@ -910,7 +901,6 @@ Error generating stack: `+l.message+`
                 }
             } catch(e) { console.log("No music link file found, using default mp3"); }
             
-            
             const audioElement = document.getElementById('main-audio');
             audioElement.src = audioUrl;
             
@@ -923,9 +913,6 @@ Error generating stack: `+l.message+`
                 document.getElementById('cd-player').classList.remove('playing');
                 document.getElementById('play-btn').innerHTML = '<i class="fas fa-play"></i>';
             };
-    
-    
-            audioElement.src = audioUrl;
 
             // Load Gallery
             const url = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/images`;
@@ -1109,6 +1096,7 @@ Error generating stack: `+l.message+`
                 onComplete: () => { document.getElementById('lock-screen').remove(); }
             });
             document.getElementById('main-content').classList.remove('hidden');
+            document.getElementById('cd-player').style.display = 'flex';
             gsap.to("#main-content", { opacity: 1, duration: 1 });
             startTimer();
             loadAssets();
