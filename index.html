@@ -7,8 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js?v=2"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVJkEZSMUkrQ6usKu8zIvxUsvV9lIv5HdBcF0nH8zp1PQpF0pTSQIbra66IrwOKorcZ+6xByznQ==" crossorigin="anonymous" referrerpolicy="no-referrer">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     
     
     <link href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&display=swap" rel="stylesheet">
@@ -191,7 +190,7 @@
             bottom: 30px;
             left: 30px;
             z-index: 2000;
-            display: flex;
+            display: none;
             align-items: center;
             gap: 15px;
             background: rgba(255, 255, 255, 0.9);
@@ -416,8 +415,8 @@ Error generating stack: `+l.message+`
 
     <!-- Lock Screen -->
     <div id="lock-screen" class="fixed inset-0 z-[2000] bg-[#fff5f7] flex flex-col items-center justify-center p-6">
-        <button class="admin-trigger-minimal" onclick="openAdmin()" aria-label="Settings" style="font-size: 24px; opacity: 0.8;">
-            ⚙️
+        <button class="admin-trigger-minimal" onclick="openAdmin()" aria-label="Settings">
+            <i class="fas fa-cog"></i>
         </button>
 
         <div class="text-center mb-10">
@@ -552,8 +551,8 @@ Error generating stack: `+l.message+`
             <h3 class="text-center text-pink-500 font-bold mb-4 text-xl">วิดีโอที่คบกัน</h3>
             <div class="video-container-static">
                 <div class="video-counter" id="video-counter" style="top: 10px; z-index: 30;">1/1</div>
-                <button class="video-nav-btn video-nav-prev" onclick="changeVideo(-1)" style="left: 10px;">⬅️</button>
-                <button class="video-nav-btn video-nav-next" onclick="changeVideo(1)" style="right: 10px;">➡️</button>
+                <button class="video-nav-btn video-nav-prev" onclick="changeVideo(-1)" style="left: 10px;"><i class="fas fa-chevron-left"></i></button>
+                <button class="video-nav-btn video-nav-next" onclick="changeVideo(1)" style="right: 10px;"><i class="fas fa-chevron-right"></i></button>
                 <video id="main-video" controls playsinline loop></video>
             </div>
         </section>
@@ -577,8 +576,8 @@ Error generating stack: `+l.message+`
         <section class="px-6 mb-24">
             <h3 class="font-cute text-3xl text-center text-pink-600 mb-8">รูปที่คบกัน 📸</h3>
             <div class="photo-slider-container">
-                <button class="slider-btn slider-prev" onclick="moveSlider(-1)">⬅️</button>
-                <button class="slider-btn slider-next" onclick="moveSlider(1)">➡️</button>
+                <button class="slider-btn slider-prev" onclick="moveSlider(-1)"><i class="fas fa-chevron-left"></i></button>
+                <button class="slider-btn slider-next" onclick="moveSlider(1)"><i class="fas fa-chevron-right"></i></button>
                 <div class="photo-slider-viewport">
                     <div id="gallery-slider" class="photo-slider-wrapper">
                         <!-- Slides will be injected here -->
@@ -1236,8 +1235,8 @@ Error generating stack: `+l.message+`
         <div class="flex flex-col">
             <div class="cd-label" id="music-name">Our Song ❤️</div>
             <div class="cd-controls mt-1">
-                <button class="cd-btn" onclick="toggleMusic()" id="play-btn" style="font-size: 24px;">
-                    ▶️
+                <button class="cd-btn" onclick="toggleMusic()" id="play-btn">
+                    <i class="fas fa-play"></i>
                 </button>
             </div>
         </div>
