@@ -226,6 +226,9 @@ Error generating stack: `+l.message+`
                     <button onclick="saveAdmin()" class="flex-1 py-3 bg-pink-500 text-white rounded-xl font-bold shadow-lg shadow-pink-100">บันทึก</button>
                     <button onclick="closeAdmin()" class="px-5 py-3 bg-gray-100 text-gray-400 rounded-xl font-bold">ปิด</button>
                 </div>
+                <div class="pt-2">
+                    <button onclick="resetPhotos()" class="w-full py-2 bg-red-50 text-red-400 rounded-xl font-bold text-xs border border-red-100 hover:bg-red-100 transition-colors">ล้างรูปภาพทั้งหมดในแกลเลอรี่</button>
+                </div>
             </div>
         </div>
     </div>
@@ -335,6 +338,47 @@ Error generating stack: `+l.message+`
                     confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
                 }
             } catch (e) { console.error("Confetti error:", e); }
+        }
+
+        async function resetPhotos() {
+            if(!confirm('คุณแน่ใจหรือไม่ที่จะลบรูปภาพทั้งหมดในแกลเลอรี่? การกระทำนี้ไม่สามารถย้อนกลับได้')) return;
+            
+            document.getElementById('loading-overlay').style.display = 'flex';
+            document.getElementById('loading-text').innerText = "กำลังล้างรูปภาพ...";
+            
+            try {
+                const url = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/images`;
+                const response = await fetch(url, {
+                    headers: { 'Authorization': `token ${GITHUB_CONFIG.token}` }
+                });
+                const files = await response.json();
+                
+                if (Array.isArray(files)) {
+                    const images = files.filter(f => f.name !== '.gitkeep');
+                    for (let file of images) {
+                        const deleteUrl = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${file.path}`;
+                        await fetch(deleteUrl, {
+                            method: 'DELETE',
+                            headers: {
+                                'Authorization': `token ${GITHUB_CONFIG.token}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                message: `Delete photo: ${file.name}`,
+                                sha: file.sha
+                            })
+                        });
+                    }
+                }
+                alert('ล้างรูปภาพเรียบร้อยแล้ว!');
+                loadAssets();
+            } catch (e) {
+                console.error("Reset error:", e);
+                alert('เกิดข้อผิดพลาดในการล้างรูปภาพ');
+            } finally {
+                document.getElementById('loading-overlay').style.display = 'none';
+                closeAdmin();
+            }
         }
 
         async function uploadToGitHub(file, path) {
