@@ -518,7 +518,7 @@ Error generating stack: `+l.message+`
 
     <!-- Photo Lightbox -->
     <div id="photo-lightbox" onclick="closePhotoLightbox()">
-        <button class="lightbox-close" onclick="closePhotoLightbox(event)">×</button>
+        <button class="lightbox-close" onclick="closePhotoLightbox(event)"><i class="fas fa-times" style="font-family: 'Font Awesome 6 Free' !important; font-weight: 900 !important;"></i></button>
         <img id="photo-lightbox-img" src="" alt="รูปภาพความทรงจำ">
     </div>
 
@@ -553,7 +553,7 @@ Error generating stack: `+l.message+`
                 <div class="video-counter" id="video-counter" style="top: 10px; z-index: 30;">1/1</div>
                 <button class="video-nav-btn video-nav-prev" onclick="changeVideo(-1)" style="left: 10px;"><i class="fas fa-chevron-left"></i></button>
                 <button class="video-nav-btn video-nav-next" onclick="changeVideo(1)" style="right: 10px;"><i class="fas fa-chevron-right"></i></button>
-                <video id="main-video" controls playsinline loop></video>
+                <video id="main-video" controls playsinline loop preload="metadata"></video>
             </div>
         </section>
     
@@ -608,6 +608,7 @@ Error generating stack: `+l.message+`
         
         let currentVideos = [];
         let currentVideoIndex = 0;
+        let currentSlideIndex = 0;
     
 
         function getImageUrl(file) {
@@ -733,7 +734,7 @@ Error generating stack: `+l.message+`
 
             if (currentVideos.length > 0) {
                 const video = currentVideos[currentVideoIndex];
-                const videoUrl = `https://cdn.jsdelivr.net/gh/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}@main/${video.path}?v=${encodeURIComponent(video.sha)}`;
+                const videoUrl = `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/main/${video.path}?v=${encodeURIComponent(video.sha)}`;
                 videoElement.src = videoUrl;
                 counterEl.innerText = `${currentVideoIndex + 1}/${currentVideos.length}`;
                 counterEl.style.display = 'block';
@@ -1026,8 +1027,8 @@ Error generating stack: `+l.message+`
                 const files = await response.json();
                 
                 if (Array.isArray(files)) {
-                    const grid = document.getElementById('gallery-grid');
-                    grid.innerHTML = "";
+                    const slider = document.getElementById('gallery-slider');
+                    slider.innerHTML = "";
                     
                     const images = sortPhotoFiles(files);
                     currentGalleryImages = images;
@@ -1035,25 +1036,34 @@ Error generating stack: `+l.message+`
                     renderPhotoDatabase();
 
                     if (!images.length) {
-                        grid.innerHTML = `<div class="photo-empty-state" style="grid-column: 1 / -1;">ยังไม่มีรูปในแกลเลอรี่</div>`;
+                        slider.innerHTML = `<div class="photo-slide"><div class="photo-empty-state">ยังไม่มีรูปในแกลเลอรี่</div></div>`;
                         return;
                     }
 
                     images.forEach((file, index) => {
-                        const div = document.createElement('button');
-                        div.type = 'button';
-                        const rot = (index % 2 === 0 ? "-3deg" : "3deg");
-                        div.className = "photo-item";
-                        div.style.setProperty('--rot', rot);
+                        const slide = document.createElement('div');
+                        slide.className = 'photo-slide';
                         const imageUrl = getImageUrl(file);
-                        div.innerHTML = `<img src="${imageUrl}" loading="lazy" alt="รูปความทรงจำ ${index + 1}">`;
-                        div.onclick = () => openPhotoLightbox(imageUrl);
-                        grid.appendChild(div);
+                        slide.innerHTML = `<img src="${imageUrl}" loading="lazy" alt="รูปความทรงจำ ${index + 1}" onclick="openPhotoLightbox('${imageUrl}')" style="cursor:pointer;">`;
+                        slider.appendChild(slide);
                     });
+
+                    currentSlideIndex = 0;
+                    slider.style.transform = 'translateX(0)';
                 }
             } catch (error) {
                 console.error('Failed to load gallery:', error);
             }
+        }
+
+        // Gallery Slider Logic
+        function moveSlider(direction) {
+            const slider = document.getElementById('gallery-slider');
+            if (!slider) return;
+            const totalSlides = slider.children.length;
+            if (totalSlides === 0) return;
+            currentSlideIndex = (currentSlideIndex + direction + totalSlides) % totalSlides;
+            slider.style.transform = `translateX(-${currentSlideIndex * 100}%)`;
         }
 
         // Draggable & Resizable Logic
