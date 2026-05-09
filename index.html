@@ -51,6 +51,7 @@
             width: 100%;
             max-width: 500px;
             font-family: "Protest Revolution", sans-serif;
+            position: relative;
         }
         .birthday-card h1 {
             font-size: 2.5rem;
@@ -63,11 +64,46 @@
             margin-bottom: 15px;
             font-family: "Protest Revolution", sans-serif;
         }
+        .birthday-card .cake-img-container {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+            margin: 20px auto;
+        }
         .birthday-card img {
             width: 100%;
             max-width: 300px;
-            margin: 20px auto;
             border-radius: 15px;
+            transition: transform 0.3s;
+        }
+        .birthday-card .candle-flame {
+            position: absolute;
+            top: 15%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 40px;
+            background: radial-gradient(circle, #ffeb3b 20%, #ff9800 60%, transparent 80%);
+            border-radius: 50% 50% 20% 20%;
+            filter: blur(2px);
+            animation: flicker 0.1s infinite alternate;
+            pointer-events: none;
+        }
+        @keyframes flicker {
+            0% { transform: translateX(-50%) scale(1); opacity: 0.9; }
+            100% { transform: translateX(-52%) scale(1.1); opacity: 1; }
+        }
+        .birthday-card .cake-img-container.blown .candle-flame {
+            display: none;
+        }
+        .birthday-card .cake-img-container.blown img {
+            filter: grayscale(0.3) brightness(0.9);
+        }
+        .blow-instruction {
+            font-size: 0.9rem;
+            color: #db2777;
+            margin-top: 10px;
+            font-style: italic;
         }
         
         /* Lock Screen Keypad */
@@ -576,7 +612,7 @@ Error generating stack: `+l.message+`
     <!-- Main Content -->
     <main id="main-content" class="hidden opacity-0">
         <header class="pt-16 pb-10 text-center px-4">
-            <h1 class="font-cute text-5xl text-pink-500 mb-6">รักแฟนนะคะอยู่กับเค้าไปนาน</h1>
+            <h1 class="font-cute text-5xl text-pink-500 mb-6">วันครบรอบ</h1>
             <div class="flex justify-center gap-2 flex-wrap">
                 <div class="bg-white p-3 rounded-2xl shadow-sm min-w-[65px] border border-pink-50">
                     <div id="t-days" class="text-xl font-bold text-pink-600">0</div>
@@ -616,7 +652,7 @@ Error generating stack: `+l.message+`
         <section class="px-6 mb-12">
             <div class="max-w-md mx-auto glass-card p-8 shadow-xl relative">
                 <div class="text-pink-900 italic leading-relaxed text-center space-y-4">
-                    <p class="font-bold text-pink-600 pt-3 text-2xl">รักแฟนนะคะอยู่กับเค้านานๆ 💖💖</p>
+                    <p class="font-bold text-pink-600 pt-3 text-xl">ครบรอบ 2 ปี 2 เดือน เค้าทำไว้ล่วงหน้านะะ ตอนนั้นเค้าคงได้เพื่อนใหม่แล้ว และแฟนยังอยู่กับเค้าตอนนั้น แฟนวันเกิดแฟนนะครับ เค้าขอให้แฟน สุขภาพร่างกายแข็งแรง ขอให้ไม่มีโรค 💖💖</p>
                 </div>
             </div>
         </section>
@@ -647,13 +683,34 @@ Error generating stack: `+l.message+`
         <section class="birthday-section">
             <div class="birthday-card">
                 <h1>Happy Birthday!</h1>
-                <p>Dear My Love,</p>
-                <p>Wishing you a day filled with joy, laughter, and all the things you love.</p>
-                <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYTJmYnZnd2dqYWlvYXBzam5vc243NGN5ejB5dHg0OGVoMDk0bmd4bCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/7NpSWoebkmJuryOWOG/giphy.gif" alt="Birthday Cake">
-                <p>May this year bring you happiness and success!</p>
+                <p>Happy Birthday to เจนน</p>
+                <p>ขอให้เจนอย่าเครียดมากกกก เค้ารักเจนมากก เจนร่างกายดี สุขภาพดี ขอให้อยู่ด้วยกับดินไปนาน Happy Birthday to เจนน</p>
+                <div class="cake-img-container" onclick="blowCandle(this)">
+                    <div class="candle-flame"></div>
+                    <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYTJmYnZnd2dqYWlvYXBzam5vc243NGN5ejB5dHg0OGVoMDk0bmd4bCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/7NpSWoebkmJuryOWOG/giphy.gif" alt="Birthday Cake">
+                    <p class="blow-instruction">🎂 กดที่เทียนเพื่อเป่าา</p>
+                </div>
                 <p>Best Wishes,<br>Always yours ❤️</p>
             </div>
         </section>
+
+        <script>
+            function blowCandle(element) {
+                if (!element.classList.contains('blown')) {
+                    element.classList.add('blown');
+                    // Add confetti effect when blown
+                    if (typeof confetti === 'function') {
+                        confetti({
+                            particleCount: 150,
+                            spread: 70,
+                            origin: { y: 0.8 }
+                        });
+                    }
+                    const instruction = element.querySelector('.blow-instruction');
+                    if (instruction) instruction.innerText = "เป่าเทียนแล้วว! ✨";
+                }
+            }
+        </script>
 
         <audio id="main-audio" loop></audio>
     </main>
