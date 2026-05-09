@@ -844,7 +844,15 @@ Error generating stack: `+l.message+`
                 audio.play().then(() => {
                     playBtn.innerHTML = '<i class="fas fa-pause"></i>';
                     cdPlayer.classList.add('playing');
-                }).catch(e => console.error("Playback failed:", e));
+                }).catch(e => {
+                    console.error("Playback failed:", e);
+                    // If failed, try to reload and play again
+                    audio.load();
+                    audio.play().then(() => {
+                        playBtn.innerHTML = '<i class="fas fa-pause"></i>';
+                        cdPlayer.classList.add('playing');
+                    });
+                });
             } else {
                 audio.pause();
                 playBtn.innerHTML = '<i class="fas fa-play"></i>';
@@ -1009,7 +1017,7 @@ Error generating stack: `+l.message+`
             updateVideoPlayer();
 
             // Load Audio
-            let audioUrl = `https://cdn.jsdelivr.net/gh/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}@main/assets/audio/main.mp3`;
+            let audioUrl = `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/main/assets/audio/main.mp3`;
             try {
                 const linkRes = await fetch(`https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/main/assets/audio/music_link.txt?v=${Date.now()}`);
                 if(linkRes.ok) {
@@ -1227,7 +1235,12 @@ Error generating stack: `+l.message+`
             document.getElementById('cd-player').style.display = 'flex';
             gsap.to("#main-content", { opacity: 1, duration: 1 });
             startTimer();
-            loadAssets();
+            loadAssets().then(() => {
+                // Try to auto-play after unlock (user interaction happened)
+                setTimeout(() => {
+                    toggleMusic();
+                }, 500);
+            });
             try {
                 if (typeof confetti === 'function') {
                     confetti({ particleCount: 100, spread: 70 });
