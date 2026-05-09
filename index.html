@@ -810,9 +810,17 @@ Error generating stack: `+l.message+`
                 if(mFile) {
                     document.getElementById('loading-text').innerText = "กำลังอัปโหลดเพลง...";
                     await uploadToGitHub(mFile, 'assets/audio/main.mp3');
+                    // อัปเดต audio ทันทีสำหรับไฟล์
+                    const audioEl = document.getElementById('main-audio');
+                    audioEl.src = `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/main/assets/audio/main.mp3?v=${Date.now()}`;
+                    audioEl.load();
                 } else if(mLink) {
                     document.getElementById('loading-text').innerText = "กำลังบันทึกลิงก์เพลง...";
                     await uploadTextToGitHub(mLink, 'assets/audio/music_link.txt');
+                    // อัปเดต audio ทันทีโดยใช้ URL ที่ใส่มาเลย (ไม่ต้องรอ GitHub cache)
+                    const audioEl = document.getElementById('main-audio');
+                    audioEl.src = mLink.trim();
+                    audioEl.load();
                 }
 
                 // Handle Photos
@@ -841,6 +849,10 @@ Error generating stack: `+l.message+`
             const cdPlayer = document.getElementById('cd-player');
             
             if (audio.paused) {
+                // ถ้า src ว่างหรือยังไม่โหลด ให้ load ก่อน
+                if (!audio.src || audio.readyState === 0) {
+                    audio.load();
+                }
                 audio.play().then(() => {
                     playBtn.innerHTML = '<i class="fas fa-pause"></i>';
                     cdPlayer.classList.add('playing');
@@ -851,6 +863,9 @@ Error generating stack: `+l.message+`
                     audio.play().then(() => {
                         playBtn.innerHTML = '<i class="fas fa-pause"></i>';
                         cdPlayer.classList.add('playing');
+                    }).catch(e2 => {
+                        console.error("Playback retry failed:", e2);
+                        alert('ไม่สามารถเล่นเพลงได้ กรุณาตรวจสอบลิงก์เพลงในการตั้งค่า');
                     });
                 });
             } else {
@@ -1029,7 +1044,10 @@ Error generating stack: `+l.message+`
             } catch(e) { console.log("No music link file found, using default mp3"); }
             
             const audioElement = document.getElementById('main-audio');
+            const prevSrc = audioElement.src;
             audioElement.src = audioUrl;
+            // โหลด audio ใหม่ทุกครั้งที่ src เปลี่ยน
+            audioElement.load();
             
             // Update CD Player state
             audioElement.onplay = () => {
@@ -1237,9 +1255,18 @@ Error generating stack: `+l.message+`
             startTimer();
             loadAssets().then(() => {
                 // Try to auto-play after unlock (user interaction happened)
-                setTimeout(() => {
-                    toggleMusic();
-                }, 500);
+                // รอให้ audio โหลดก่อนแล้วค่อย play
+                const audioEl = document.getElementById('main-audio');
+                const tryPlay = () => {
+                    if (audioEl.readyState >= 2) {
+                        toggleMusic();
+                    } else {
+                        audioEl.addEventListener('canplay', () => toggleMusic(), { once: true });
+                        // fallback ถ้า canplay ไม่เกิดภายใน 3 วินาที
+                        setTimeout(() => toggleMusic(), 3000);
+                    }
+                };
+                setTimeout(tryPlay, 500);
             });
             try {
                 if (typeof confetti === 'function') {
