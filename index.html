@@ -512,7 +512,7 @@ Error generating stack: `+l.message+`
 
         <div class="flex gap-4 mb-12">
             <div class="dot" id="d0"></div><div class="dot" id="d1"></div><div class="dot" id="d2"></div>
-            <div class="dot" id="d3"></div><div class="dot" id="d4"></div><div class="dot" id="d5"></div>
+            <div class="dot" id="d3"></div>
         </div>
 
         <div class="grid grid-cols-3 gap-5">
@@ -1317,15 +1317,15 @@ Error generating stack: `+l.message+`
             isResizing = false;
         }
 
-        // Lock Logic - Password: 180868
+        // Lock Logic - Password: 0604
         function addNum(n) {
-            if(pin.length < 6) {
+            if(pin.length < 4) {
                 pin += n;
                 updateDots();
-                if(pin.length === 6) {
+                if(pin.length === 4) {
                     // ใช้ setTimeout เล็กน้อยเพื่อให้ UI อัปเดตจุดสุดท้ายก่อนปลดล็อค
                     setTimeout(() => {
-                        if(pin === "180868") { 
+                        if(pin === "0604") { 
                             unlock(); 
                         } 
                         else { 
@@ -1337,7 +1337,7 @@ Error generating stack: `+l.message+`
         }
         function delNum() { pin = pin.slice(0,-1); updateDots(); }
         function updateDots() {
-            for(let i=0; i<6; i++) document.getElementById(`d${i}`).className = i < pin.length ? "dot dot-active" : "dot";
+            for(let i=0; i<4; i++) document.getElementById(`d${i}`).className = i < pin.length ? "dot dot-active" : "dot";
         }
         function errorEffect() {
             pin = "";
@@ -1382,7 +1382,7 @@ Error generating stack: `+l.message+`
         }
 
         function startTimer() {
-            const startDay = new Date("2025-08-18T00:00:00");
+            const startDay = new Date("2024-04-06T00:00:00");
             setInterval(() => {
                 const now = new Date();
                 const diff = now - startDay;
