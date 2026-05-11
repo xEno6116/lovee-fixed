@@ -558,7 +558,29 @@ Error generating stack: `+l.message+`
                     <input type="text" id="music-link" class="file-input" placeholder="หรือวางลิงก์เพลงที่นี่ (เช่น https://.../song.mp3)">
                 </div>
     
-                <div class="flex gap-3 pt-2">
+                
+                <div class="bg-blue-50/70 border border-blue-100 rounded-2xl p-3 space-y-3">
+                    <h4 class="text-xs font-bold text-blue-500 uppercase">ตั้งค่าพื้นฐาน ⚙️</h4>
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">ข้อความหน้าเว็บ</label>
+                        <textarea id="up-message" class="file-input h-20" placeholder="ใส่ข้อความที่นี่..."></textarea>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">วันที่เริ่มคบ (YYYY-MM-DD)</label>
+                            <input type="date" id="up-start-date" class="file-input">
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">รหัส PIN (4 หลัก)</label>
+                            <input type="text" id="up-pin" class="file-input" maxlength="4" placeholder="0604">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">GitHub Token (ระวัง!)</label>
+                        <input type="password" id="up-token" class="file-input" placeholder="ghp_xxxx...">
+                    </div>
+                </div>
+<div class="flex gap-3 pt-2">
                     <button onclick="saveAdmin()" class="flex-1 py-3 bg-pink-500 text-white rounded-xl font-bold shadow-lg shadow-pink-100">บันทึก</button>
                     <button onclick="closeAdmin()" class="px-5 py-3 bg-gray-100 text-gray-400 rounded-xl font-bold">ปิด</button>
                 </div>
@@ -652,7 +674,7 @@ Error generating stack: `+l.message+`
         <section class="px-6 mb-12">
             <div class="max-w-md mx-auto glass-card p-8 shadow-xl relative">
                 <div class="text-pink-900 italic leading-relaxed text-center space-y-4">
-                    <p class="font-bold text-pink-600 pt-3 text-xl">ครบรอบ 2 ปี 2 เดือน เค้าทำไว้ล่วงหน้านะะ ตอนนั้นเค้าคงได้เพื่อนใหม่แล้ว และแฟนยังอยู่กับเค้าตอนนั้น แฟนวันเกิดแฟนนะครับ เค้าขอให้แฟน สุขภาพร่างกายแข็งแรง ขอให้ไม่มีโรค 💖💖</p>
+                    <p id="display-message" class="font-bold text-pink-600 pt-3 text-xl">กำลังโหลดข้อความ...</p>
                 </div>
             </div>
         </section>
@@ -723,7 +745,12 @@ Error generating stack: `+l.message+`
             repo: 'lovee'
         };
 
-        let pin = "";
+        let pin = "0604";
+        let configData = {
+            message: "ครบรอบ 2 ปี 2 เดือน เค้าทำไว้ล่วงหน้านะะ ตอนนั้นเค้าคงได้เพื่อนใหม่แล้ว และแฟนยังอยู่กับเค้าตอนนั้น แฟนวันเกิดแฟนนะครับ เค้าขอให้แฟน สุขภาพร่างกายแข็งแรง ขอให้ไม่มีโรค 💖💖",
+            startDate: "2024-04-06",
+            pin: "0604"
+        };
         let currentGalleryImages = [];
         
         let currentVideos = [];
@@ -875,6 +902,32 @@ Error generating stack: `+l.message+`
             }
         }
     
+        
+        async function loadConfig() {
+            try {
+                const url = `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/main/assets/config.json?v=${Date.now()}`;
+                const res = await fetch(url);
+                if(res.ok) {
+                    const data = await res.json();
+                    configData = { ...configData, ...data };
+                }
+            } catch(e) { console.log("No config file found, using defaults"); }
+            
+            // อัปเดต UI
+            document.getElementById('display-message').innerText = configData.message;
+            document.getElementById('up-message').value = configData.message;
+            document.getElementById('up-start-date').value = configData.startDate;
+            document.getElementById('up-pin').value = configData.pin;
+            document.getElementById('up-token').value = GITHUB_CONFIG.token;
+        }
+
+        // เรียกใช้ loadConfig ใน loadAssets
+        const originalLoadAssets = loadAssets;
+        loadAssets = async function() {
+            await loadConfig();
+            await originalLoadAssets();
+        }
+
         // Admin functionality
         function openAdmin() {
             document.getElementById('admin-modal').style.display = 'flex';
@@ -897,10 +950,42 @@ Error generating stack: `+l.message+`
             const mLink = document.getElementById('music-link').value.trim();
             const pFiles = document.getElementById('up-photos').files;
 
-            let hasChanges = mFile || mLink || pFiles.length > 0;
+            const newMessage = document.getElementById('up-message').value.trim();
+            const newStartDate = document.getElementById('up-start-date').value;
+            const newPin = document.getElementById('up-pin').value.trim();
+            const newToken = document.getElementById('up-token').value.trim();
+
+            let hasChanges = mFile || mLink || pFiles.length > 0 || 
+                             newMessage !== configData.message || 
+                             newStartDate !== configData.startDate || 
+                             newPin !== configData.pin ||
+                             (newToken && newToken !== GITHUB_CONFIG.token);
+            
             videoInputs.forEach(input => { if(input.files[0]) hasChanges = true; });
 
             if(hasChanges) {
+                document.getElementById('loading-overlay').style.display = 'flex';
+                
+                // บันทึก Config ถ้ามีการเปลี่ยนแปลง
+                if(newMessage !== configData.message || newStartDate !== configData.startDate || newPin !== configData.pin) {
+                    document.getElementById('loading-text').innerText = "กำลังบันทึกการตั้งค่า...";
+                    const newConfig = {
+                        message: newMessage,
+                        startDate: newStartDate,
+                        pin: newPin
+                    };
+                    await uploadTextToGitHub(JSON.stringify(newConfig, null, 2), 'assets/config.json');
+                    configData = newConfig;
+                }
+
+                // บันทึก Token ใหม่ถ้ามีการใส่มา
+                if(newToken && newToken !== GITHUB_CONFIG.token) {
+                    // แก้ไขไฟล์ index.html โดยตรงผ่าน GitHub API (ขั้นตอนนี้อาจจะยากหน่อยใน browser-side JS แต่ลองดู)
+                    // ในที่นี้เราจะแค่เปลี่ยนใน runtime ก่อน และแนะนำให้ user manually update ถ้าจำเป็น 
+                    // หรือจะใช้วิธีแก้ index.html ผ่าน API ก็ได้
+                    GITHUB_CONFIG.token = newToken;
+                }
+
                 document.getElementById('loading-overlay').style.display = 'flex';
                 
                 // Handle Videos
@@ -1325,7 +1410,7 @@ Error generating stack: `+l.message+`
                 if(pin.length === 4) {
                     // ใช้ setTimeout เล็กน้อยเพื่อให้ UI อัปเดตจุดสุดท้ายก่อนปลดล็อค
                     setTimeout(() => {
-                        if(pin === "0604") { 
+                        if(pin === configData.pin) { 
                             unlock(); 
                         } 
                         else { 
@@ -1382,7 +1467,7 @@ Error generating stack: `+l.message+`
         }
 
         function startTimer() {
-            const startDay = new Date("2024-04-06T00:00:00");
+            const startDay = new Date(configData.startDate + "T00:00:00");
             setInterval(() => {
                 const now = new Date();
                 const diff = now - startDay;
