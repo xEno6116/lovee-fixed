@@ -767,11 +767,17 @@ Error generating stack: `+l.message+`
             const statusEl = document.getElementById('video-db-status');
             if (statusEl) statusEl.innerText = 'กำลังโหลด...';
             try {
-                const url = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/assets/video`;
-                const headers = GITHUB_CONFIG.token ? { 'Authorization': `token ${GITHUB_CONFIG.token}` } : {};
-                const response = await fetch(url, { headers });
-                const files = await response.json();
-                currentVideos = Array.isArray(files) ? files.filter(f => f.name.startsWith('video') && f.name.endsWith('.mp4')).sort((a,b) => a.name.localeCompare(b.name)) : [];
+                // สำหรับความเสถียร เราจะลองโหลด video1-5 ตรงๆ เลย
+                const videosFound = [];
+                for(let i=1; i<=5; i++) {
+                    const vPath = `assets/video/video${i}.mp4`;
+                    const vUrl = `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/main/${vPath}`;
+                    const check = await fetch(vUrl, { method: 'HEAD' });
+                    if(check.ok) {
+                        videosFound.push({ name: `video${i}.mp4`, path: vPath });
+                    }
+                }
+                currentVideos = videosFound;
             } catch (error) {
                 console.error('Failed to refresh video database:', error);
                 currentVideos = [];
@@ -868,9 +874,10 @@ Error generating stack: `+l.message+`
 
             if (currentVideos.length > 0) {
                 const video = currentVideos[currentVideoIndex];
-                const videoUrl = `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/main/${video.path}?v=${encodeURIComponent(video.sha)}`;
+                // ใช้ URL ตรงจาก GitHub เพื่อความเร็ว
+                const videoUrl = `https://raw.githubusercontent.com/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/main/${video.path}?v=${Date.now()}`;
                 videoElement.src = videoUrl;
-                videoElement.load(); // Force reload for new source
+                videoElement.load(); 
                 counterEl.innerText = `${currentVideoIndex + 1}/${currentVideos.length}`;
                 counterEl.style.display = 'block';
                 
