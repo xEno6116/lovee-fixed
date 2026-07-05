@@ -519,7 +519,9 @@ Error generating stack: `+l.message+`
             <script>
                 for(let i=1; i<=9; i++) document.write(`<button class="key-btn" onclick="addNum('${i}')">${i}</button>`);
             </script>
-            <button class="key-btn" onclick="addNum('0')">0</button><button class="key-btn text-pink-300" onclick="delNum()"><i class="fas fa-backspace"></i></button>
+            <div class="flex items-center justify-center"></div>
+            <button class="key-btn" onclick="addNum('0')">0</button>
+            <button class="key-btn text-pink-300" onclick="delNum()"><i class="fas fa-backspace"></i></button>
         </div>
     </div>
 
@@ -1409,7 +1411,7 @@ Error generating stack: `+l.message+`
         }
         function delNum() { pin = pin.slice(0,-1); updateDots(); }
         function updateDots() {
-            for(let i=0; i<4; i++) document.getElementById(`d${i}`).className = i < pin.length ? "dot dot-active" : "dot";
+            for(let i=0; i<6; i++) document.getElementById(`d${i}`).className = i < pin.length ? "dot dot-active" : "dot";
         }
         function errorEffect() {
             pin = "";
