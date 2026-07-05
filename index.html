@@ -512,14 +512,14 @@ Error generating stack: `+l.message+`
 
         <div class="flex gap-4 mb-12">
             <div class="dot" id="d0"></div><div class="dot" id="d1"></div><div class="dot" id="d2"></div>
-            <div class="dot" id="d3"></div>
+            <div class="dot" id="d3"></div><div class="dot" id="d4"></div><div class="dot" id="d5"></div>
         </div>
 
         <div class="grid grid-cols-3 gap-5">
             <script>
                 for(let i=1; i<=9; i++) document.write(`<button class="key-btn" onclick="addNum('${i}')">${i}</button>`);
             </script>
-            <div></div><button class="key-btn" onclick="addNum('0')">0</button><button class="key-btn text-pink-300" onclick="delNum()"><i class="fas fa-backspace"></i></button>
+            <button class="key-btn" onclick="addNum('0')">0</button><button class="key-btn text-pink-300" onclick="delNum()"><i class="fas fa-backspace"></i></button>
         </div>
     </div>
 
@@ -571,8 +571,8 @@ Error generating stack: `+l.message+`
                             <input type="date" id="up-start-date" class="file-input">
                         </div>
                         <div>
-                            <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">รหัส PIN (4 หลัก)</label>
-                            <input type="text" id="up-pin" class="file-input" maxlength="4" placeholder="0604">
+                            <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">รหัส PIN (6 หลัก)</label>
+                            <input type="text" id="up-pin" class="file-input" maxlength="6" placeholder="060467">
                         </div>
                     </div>
                     <div>
@@ -701,20 +701,7 @@ Error generating stack: `+l.message+`
             <p class="font-cute text-2xl text-pink-500 mb-2">อยู่ด้วยกันตลอดไปนะ 💖🌷</p>
          </footer >
 
-        <!-- Birthday Cake Section -->
-        <section class="birthday-section">
-            <div class="birthday-card">
-                <h1>Happy Birthday!</h1>
-                <p>Happy Birthday to เจนน</p>
-                <p>ขอให้เจนอย่าเครียดมากกกก เค้ารักเจนมากก เจนร่างกายดี สุขภาพดี ขอให้อยู่ด้วยกับดินไปนาน Happy Birthday to เจนน</p>
-                <div class="cake-img-container" onclick="blowCandle(this)">
-                    <div class="candle-flame"></div>
-                    <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExYTJmYnZnd2dqYWlvYXBzam5vc243NGN5ejB5dHg0OGVoMDk0bmd4bCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/7NpSWoebkmJuryOWOG/giphy.gif" alt="Birthday Cake">
-                    <p class="blow-instruction">🎂 กดที่เทียนเพื่อเป่าา</p>
-                </div>
-                <p>Best Wishes,<br>Always yours ❤️</p>
-            </div>
-        </section>
+
 
         <script>
             function blowCandle(element) {
@@ -1402,12 +1389,12 @@ Error generating stack: `+l.message+`
             isResizing = false;
         }
 
-        // Lock Logic - Password: 0604
+        // Lock Logic - Password: 060467
         function addNum(n) {
-            if(pin.length < 4) {
+            if(pin.length < 6) {
                 pin += n;
                 updateDots();
-                if(pin.length === 4) {
+                if(pin.length === 6) {
                     // ใช้ setTimeout เล็กน้อยเพื่อให้ UI อัปเดตจุดสุดท้ายก่อนปลดล็อค
                     setTimeout(() => {
                         if(pin === configData.pin) { 
