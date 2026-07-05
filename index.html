@@ -729,7 +729,7 @@ Error generating stack: `+l.message+`
     <script>
         // GitHub Configuration
         const GITHUB_CONFIG = {
-            token: '', 
+            token: localStorage.getItem('github_token') || '', 
             owner: 'xEno6116',
             repo: 'lovee-fixed'
         };
@@ -905,7 +905,13 @@ Error generating stack: `+l.message+`
             document.getElementById('up-message').value = configData.message;
             document.getElementById('up-start-date').value = configData.startDate;
             document.getElementById('up-pin').value = configData.pin;
-            document.getElementById('up-token').value = GITHUB_CONFIG.token;
+            
+            // Sync token from localStorage to input
+            const storedToken = localStorage.getItem('github_token');
+            if (storedToken) {
+                GITHUB_CONFIG.token = storedToken;
+                document.getElementById('up-token').value = storedToken;
+            }
         }
 
         // เรียกใช้ loadConfig ใน loadAssets
@@ -965,11 +971,9 @@ Error generating stack: `+l.message+`
                     configData = newConfig;
                 }
 
-                // บันทึก Token ใหม่ถ้ามีการใส่มา
-                if(newToken && newToken !== GITHUB_CONFIG.token) {
-                    // แก้ไขไฟล์ index.html โดยตรงผ่าน GitHub API (ขั้นตอนนี้อาจจะยากหน่อยใน browser-side JS แต่ลองดู)
-                    // ในที่นี้เราจะแค่เปลี่ยนใน runtime ก่อน และแนะนำให้ user manually update ถ้าจำเป็น 
-                    // หรือจะใช้วิธีแก้ index.html ผ่าน API ก็ได้
+                // บันทึก Token ใหม่ลง localStorage เพื่อความเสถียร
+                if(newToken) {
+                    localStorage.setItem('github_token', newToken);
                     GITHUB_CONFIG.token = newToken;
                 }
 
