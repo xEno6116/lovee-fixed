@@ -512,7 +512,7 @@ Error generating stack: `+l.message+`
 
         <div class="flex gap-4 mb-12">
             <div class="dot" id="d0"></div><div class="dot" id="d1"></div><div class="dot" id="d2"></div>
-            <div class="dot" id="d3"></div><div class="dot" id="d4"></div><div class="dot" id="d5"></div>
+            <div class="dot" id="d3"></div>
         </div>
 
         <div class="grid grid-cols-3 gap-5">
@@ -573,8 +573,8 @@ Error generating stack: `+l.message+`
                             <input type="date" id="up-start-date" class="file-input">
                         </div>
                         <div>
-                            <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">รหัส PIN (6 หลัก)</label>
-                            <input type="text" id="up-pin" class="file-input" maxlength="6" placeholder="060467">
+                            <label class="text-[10px] font-bold text-gray-400 uppercase ml-2">รหัส PIN (4 หลัก)</label>
+                            <input type="text" id="up-pin" class="file-input" maxlength="4" placeholder="0604">
                         </div>
                     </div>
                     <div>
@@ -738,7 +738,7 @@ Error generating stack: `+l.message+`
         let configData = {
             message: "ครบรอบ 2 ปี 2 เดือน เค้าทำไว้ล่วงหน้านะะ ตอนนั้นเค้าคงได้เพื่อนใหม่แล้ว และแฟนยังอยู่กับเค้าตอนนั้น แฟนวันเกิดแฟนนะครับ เค้าขอให้แฟน สุขภาพร่างกายแข็งแรง ขอให้ไม่มีโรค 💖💖",
             startDate: "2024-04-06",
-            pin: "060467"
+            pin: "0604"
         };
         let currentGalleryImages = [];
         
@@ -1391,12 +1391,12 @@ Error generating stack: `+l.message+`
             isResizing = false;
         }
 
-        // Lock Logic - Password: 060467
+        // Lock Logic - Password: 0604
         function addNum(n) {
-            if(pin.length < 6) {
+            if(pin.length < 4) {
                 pin += n;
                 updateDots();
-                if(pin.length === 6) {
+                if(pin.length === 4) {
                     // ใช้ setTimeout เล็กน้อยเพื่อให้ UI อัปเดตจุดสุดท้ายก่อนปลดล็อค
                     setTimeout(() => {
                         if(pin === configData.pin) { 
@@ -1411,7 +1411,7 @@ Error generating stack: `+l.message+`
         }
         function delNum() { pin = pin.slice(0,-1); updateDots(); }
         function updateDots() {
-            for(let i=0; i<6; i++) document.getElementById(`d${i}`).className = i < pin.length ? "dot dot-active" : "dot";
+            for(let i=0; i<4; i++) document.getElementById(`d${i}`).className = i < pin.length ? "dot dot-active" : "dot";
         }
         function errorEffect() {
             pin = "";
