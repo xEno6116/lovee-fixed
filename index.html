@@ -729,7 +729,7 @@ Error generating stack: `+l.message+`
     <script>
         // GitHub Configuration
         const GITHUB_CONFIG = {
-            token: 'ghp_' + 'YB7dRY2SihIr58Bt5R9thf0pLdnUAG0PvAjB',
+            token: '', 
             owner: 'xEno6116',
             repo: 'lovee-fixed'
         };
@@ -768,9 +768,8 @@ Error generating stack: `+l.message+`
             if (statusEl) statusEl.innerText = 'กำลังโหลด...';
             try {
                 const url = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/assets/video`;
-                const response = await fetch(url, {
-                    headers: { 'Authorization': `token ${GITHUB_CONFIG.token}` }
-                });
+                const headers = GITHUB_CONFIG.token ? { 'Authorization': `token ${GITHUB_CONFIG.token}` } : {};
+                const response = await fetch(url, { headers });
                 const files = await response.json();
                 currentVideos = Array.isArray(files) ? files.filter(f => f.name.startsWith('video') && f.name.endsWith('.mp4')).sort((a,b) => a.name.localeCompare(b.name)) : [];
             } catch (error) {
@@ -800,9 +799,8 @@ Error generating stack: `+l.message+`
             }
             try {
                 const url = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/images`;
-                const response = await fetch(url, {
-                    headers: { 'Authorization': `token ${GITHUB_CONFIG.token}` }
-                });
+                const headers = GITHUB_CONFIG.token ? { 'Authorization': `token ${GITHUB_CONFIG.token}` } : {};
+                const response = await fetch(url, { headers });
                 const files = await response.json();
                 currentGalleryImages = Array.isArray(files) ? sortPhotoFiles(files) : [];
             } catch (error) {
