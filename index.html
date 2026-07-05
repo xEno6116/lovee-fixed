@@ -729,16 +729,16 @@ Error generating stack: `+l.message+`
     <script>
         // GitHub Configuration
         const GITHUB_CONFIG = {
-            token: 'ghp_' + 'zX9xrV14GIxkwBVHKXNweoWE2IlLHX47WSJU',
-            owner: 'thanawatrkd-alt',
-            repo: 'lovee'
+            token: 'ghp_' + 'YB7dRY2SihIr58Bt5R9thf0pLdnUAG0PvAjB',
+            owner: 'xEno6116',
+            repo: 'lovee-fixed'
         };
 
-        let pin = "0604";
+        let pin = "";
         let configData = {
             message: "ครบรอบ 2 ปี 2 เดือน เค้าทำไว้ล่วงหน้านะะ ตอนนั้นเค้าคงได้เพื่อนใหม่แล้ว และแฟนยังอยู่กับเค้าตอนนั้น แฟนวันเกิดแฟนนะครับ เค้าขอให้แฟน สุขภาพร่างกายแข็งแรง ขอให้ไม่มีโรค 💖💖",
             startDate: "2024-04-06",
-            pin: "0604"
+            pin: "060467"
         };
         let currentGalleryImages = [];
         
@@ -1489,3 +1489,10 @@ Error generating stack: `+l.message+`
     
 </body>
 </html>
+
+<script>
+    // Load config as soon as the page loads to ensure PIN is correct
+    window.addEventListener('DOMContentLoaded', () => {
+        loadConfig();
+    });
+</script>
