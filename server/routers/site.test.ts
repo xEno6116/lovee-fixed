@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 const ownedSite = { id: 9, ownerId: 1, slug: "main-memory", title: "เว็บไซต์ความทรงจำหลัก" };
 const getOwnedSiteBySlug = vi.fn(async (ownerId: number, slug: string) => ownerId === 1 && slug === "main-memory" ? ownedSite : undefined);
-const getPrivateSiteData = vi.fn(async (ownerId: number, slug: string) => ownerId === 1 && slug === "main-memory" ? ({ site: ownedSite, settings: { id: 42, startDate: "2024-04-06", memoryMessage: "เทส", musicUrl: "" }, images: [], videos: [] }) : undefined);
-const getAdminSiteData = vi.fn(async (ownerId: number, slug: string) => ownerId === 1 && slug === "main-memory" ? ({ site: ownedSite, settings: { id: 42, siteId: 9, pinHash: "hash", startDate: "2024-04-06", memoryMessage: "เทส", musicUrl: "" }, assets: [] }) : undefined);
+const getPrivateSiteData = vi.fn(async (ownerId: number, slug: string) => ownerId === 1 && slug === "main-memory" ? ({ site: ownedSite, settings: { id: 42, startDate: "2024-04-06", memoryMessage: "เทส", musicUrl: "", facebookUrl: "", instagramUrl: "", themeColor: "#ec4899" }, images: [], videos: [] }) : undefined);
+const getAdminSiteData = vi.fn(async (ownerId: number, slug: string) => ownerId === 1 && slug === "main-memory" ? ({ site: ownedSite, settings: { id: 42, siteId: 9, pinHash: "hash", startDate: "2024-04-06", memoryMessage: "เทส", musicUrl: "", facebookUrl: "", instagramUrl: "", themeColor: "#ec4899" }, assets: [] }) : undefined);
 const verifySitePin = vi.fn(async (siteId: number, pin: string) => siteId === 9 && pin === "0000");
 const updateSiteSettings = vi.fn(async (siteId: number, input: Record<string, unknown>) => ({ id: 42, siteId, ...input }));
 const createSiteForOwner = vi.fn(async (ownerId: number, input: { title: string; slug: string }) => ({ id: 10, ownerId, ...input }));
@@ -50,9 +50,14 @@ describe("multi-site router", () => {
 
   it("saves settings only after resolving the site to its owner", async () => {
     const caller = siteRouter.createCaller({ user: owner } as never);
-    const input = { slug: "main-memory", memoryMessage: "บันทึกใหม่", startDate: "2024-04-06", pin: "0000", musicUrl: "" };
-    await expect(caller.admin.saveSettings(input)).resolves.toMatchObject({ id: 42, siteId: 9, memoryMessage: "บันทึกใหม่" });
+    const input = { slug: "main-memory", facebookUrl: "https://facebook.com/example", instagramUrl: "https://instagram.com/example", themeColor: "#2563eb" };
+    await expect(caller.admin.saveSettings(input)).resolves.toMatchObject({ id: 42, siteId: 9, themeColor: "#2563eb" });
     expect(updateSiteSettings).toHaveBeenCalledWith(9, input);
+  });
+
+  it("rejects non-http social links before saving settings", async () => {
+    const caller = siteRouter.createCaller({ user: owner } as never);
+    await expect(caller.admin.saveSettings({ slug: "main-memory", facebookUrl: "javascript:alert(1)", instagramUrl: "", themeColor: "#ec4899" })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
   it("deletes only a site belonging to the authenticated owner", async () => {

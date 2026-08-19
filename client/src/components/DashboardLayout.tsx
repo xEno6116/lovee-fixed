@@ -20,6 +20,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { OwnerLoginButton } from "@/components/OwnerLoginModal";
+import { OWNER_DASHBOARD_PATH } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import { Heart, LogOut, PanelLeft } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
@@ -27,7 +28,7 @@ import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 
 const menuItems = [
-  { icon: Heart, label: "เว็บไซต์ของฉัน", path: "/" },
+  { icon: Heart, label: "เว็บไซต์ของฉัน", path: OWNER_DASHBOARD_PATH },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

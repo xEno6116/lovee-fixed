@@ -20,12 +20,12 @@ import { protectedProcedure, router } from "../_core/trpc";
 
 const slugSchema = z.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
 const siteInput = z.object({ slug: slugSchema });
+const optionalHttpUrl = z.string().url().refine((value) => /^https?:\/\//i.test(value), "ใช้ลิงก์ http หรือ https เท่านั้น").or(z.literal(""));
 const settingsInput = z.object({
   slug: slugSchema,
-  memoryMessage: z.string().trim().min(1).max(5000),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  pin: z.string().regex(/^\d{4}$/).optional(),
-  musicUrl: z.string().url().or(z.literal("")),
+  facebookUrl: optionalHttpUrl,
+  instagramUrl: optionalHttpUrl,
+  themeColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "เลือกรหัสสีแบบ #RRGGBB"),
 });
 
 async function requireOwnedSite(ownerId: number, slug: string) {

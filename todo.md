@@ -87,3 +87,11 @@
 - [x] ยืนยันบน production ว่า `/api/trpc` ทำงานและ `/api/oauth/callback` ไม่ถูกใช้งานแล้ว
 - [x] ตรวจ UI/interaction ของ auth gate ใน Dashboard, Home, Settings และ DashboardLayout บน production
 - [x] เปลี่ยน Vercel production subdomain เป็น `weblovesite` และตรวจ URL ใหม่
+- [ ] ให้ลิงก์หลักเปิดหน้าบ้านของเว็บไซต์หลัก และย้ายหลังบ้านไปที่ `/dashboard`
+- [ ] ซ่อนปุ่มหรือทางกลับ Dashboard ที่มองเห็นได้จากหน้าบ้าน
+- [ ] ทดสอบ route หน้าบ้านและหลังบ้านบน production หลัง deploy
+- [x] สร้าง route หลังบ้านแยกที่เดายากและไม่แสดงลิงก์จากหน้าบ้าน โดยยังบังคับ owner password
+- [x] ลดหน้า Settings ให้จัดการสื่อ พร้อม social links และสีธีมของหน้าบ้านเท่านั้น
+- [x] เพิ่มการตั้งค่า Facebook และ Instagram ผ่านหลังบ้าน แล้วแสดงบนหน้าบ้าน
+- [x] เพิ่มการเลือกสีธีมผ่านหลังบ้านและใช้สีดังกล่าวกับหน้าบ้าน
+- [ ] ทดสอบการบันทึก media, social links และธีมสีผ่าน backend บน production

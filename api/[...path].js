@@ -325,6 +325,9 @@ async function createSiteForOwner(ownerId, input) {
         startDate: "2024-04-06",
         memoryMessage: "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E04\u0E27\u0E32\u0E21\u0E17\u0E23\u0E07\u0E08\u0E33\u0E02\u0E2D\u0E07\u0E40\u0E23\u0E32",
         musicUrl: "",
+        facebookUrl: "",
+        instagramUrl: "",
+        themeColor: "#ec4899",
         createdAt: now,
         updatedAt: now
       },
@@ -362,7 +365,10 @@ async function getPrivateSiteData(ownerId, slug) {
       id: site.settings.id,
       startDate: site.settings.startDate,
       memoryMessage: site.settings.memoryMessage,
-      musicUrl: site.settings.musicUrl
+      musicUrl: site.settings.musicUrl,
+      facebookUrl: site.settings.facebookUrl ?? "",
+      instagramUrl: site.settings.instagramUrl ?? "",
+      themeColor: site.settings.themeColor ?? "#ec4899"
     },
     images: assets.filter((asset) => asset.kind === "image").map(toClientAsset),
     videos: assets.filter((asset) => asset.kind === "video").map(toClientAsset)
@@ -388,10 +394,9 @@ async function updateSiteSettings(siteId, input) {
     const now = (/* @__PURE__ */ new Date()).toISOString();
     site.settings = {
       ...site.settings,
-      memoryMessage: input.memoryMessage,
-      startDate: input.startDate,
-      musicUrl: input.musicUrl,
-      ...input.pin ? { pinHash: hashPin(input.pin) } : {},
+      facebookUrl: input.facebookUrl,
+      instagramUrl: input.instagramUrl,
+      themeColor: input.themeColor,
       updatedAt: now
     };
     site.updatedAt = now;
@@ -439,6 +444,10 @@ async function deleteMediaAsset(siteId, id) {
     if (!site) return { data: repository, result: { success: false } };
     const assetIndex = site.assets.findIndex((asset) => asset.id === id);
     if (assetIndex === -1) return { data: repository, result: { success: false } };
+    if (site.assets[assetIndex].kind === "audio" && site.settings.musicUrl === site.assets[assetIndex].url) {
+      site.settings.musicUrl = "";
+      site.settings.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    }
     site.assets.splice(assetIndex, 1);
     site.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
     return { data: repository, result: { success: true } };
@@ -906,12 +915,12 @@ import { TRPCError as TRPCError3 } from "@trpc/server";
 import { z as z2 } from "zod";
 var slugSchema = z2.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "\u0E43\u0E0A\u0E49\u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23\u0E2D\u0E31\u0E07\u0E01\u0E24\u0E29 \u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 \u0E41\u0E25\u0E30\u0E02\u0E35\u0E14\u0E01\u0E25\u0E32\u0E07\u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19");
 var siteInput = z2.object({ slug: slugSchema });
+var optionalHttpUrl = z2.string().url().refine((value) => /^https?:\/\//i.test(value), "\u0E43\u0E0A\u0E49\u0E25\u0E34\u0E07\u0E01\u0E4C http \u0E2B\u0E23\u0E37\u0E2D https \u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19").or(z2.literal(""));
 var settingsInput = z2.object({
   slug: slugSchema,
-  memoryMessage: z2.string().trim().min(1).max(5e3),
-  startDate: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  pin: z2.string().regex(/^\d{4}$/).optional(),
-  musicUrl: z2.string().url().or(z2.literal(""))
+  facebookUrl: optionalHttpUrl,
+  instagramUrl: optionalHttpUrl,
+  themeColor: z2.string().regex(/^#[0-9a-fA-F]{6}$/, "\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E2A\u0E35\u0E41\u0E1A\u0E1A #RRGGBB")
 });
 async function requireOwnedSite(ownerId, slug) {
   const site = await getOwnedSiteBySlug(ownerId, slug);

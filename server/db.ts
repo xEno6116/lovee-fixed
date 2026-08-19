@@ -14,6 +14,9 @@ type StoredSettings = {
   startDate: string;
   memoryMessage: string;
   musicUrl: string;
+  facebookUrl?: string;
+  instagramUrl?: string;
+  themeColor?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -195,6 +198,9 @@ export async function createSiteForOwner(ownerId: number, input: { title: string
         startDate: "2024-04-06",
         memoryMessage: "บันทึกความทรงจำของเรา",
         musicUrl: "",
+        facebookUrl: "",
+        instagramUrl: "",
+        themeColor: "#ec4899",
         createdAt: now,
         updatedAt: now,
       },
@@ -237,6 +243,9 @@ export async function getPrivateSiteData(ownerId: number, slug: string) {
       startDate: site.settings.startDate,
       memoryMessage: site.settings.memoryMessage,
       musicUrl: site.settings.musicUrl,
+      facebookUrl: site.settings.facebookUrl ?? "",
+      instagramUrl: site.settings.instagramUrl ?? "",
+      themeColor: site.settings.themeColor ?? "#ec4899",
     },
     images: assets.filter((asset) => asset.kind === "image").map(toClientAsset),
     videos: assets.filter((asset) => asset.kind === "video").map(toClientAsset),
@@ -258,17 +267,16 @@ export async function verifySitePin(siteId: number, pin: string) {
   return Boolean(settings && settings.pinHash === hashPin(pin));
 }
 
-export async function updateSiteSettings(siteId: number, input: { memoryMessage: string; startDate: string; pin?: string; musicUrl: string }) {
+export async function updateSiteSettings(siteId: number, input: { facebookUrl: string; instagramUrl: string; themeColor: string }) {
   return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update settings ${siteId}`, (repository) => {
     const site = getSite(repository, siteId);
     if (!site) throw new Error("ไม่พบเว็บไซต์สำหรับบันทึกการตั้งค่า");
     const now = new Date().toISOString();
     site.settings = {
       ...site.settings,
-      memoryMessage: input.memoryMessage,
-      startDate: input.startDate,
-      musicUrl: input.musicUrl,
-      ...(input.pin ? { pinHash: hashPin(input.pin) } : {}),
+      facebookUrl: input.facebookUrl,
+      instagramUrl: input.instagramUrl,
+      themeColor: input.themeColor,
       updatedAt: now,
     };
     site.updatedAt = now;
@@ -320,6 +328,10 @@ export async function deleteMediaAsset(siteId: number, id: number) {
     if (!site) return { data: repository, result: { success: false } };
     const assetIndex = site.assets.findIndex((asset) => asset.id === id);
     if (assetIndex === -1) return { data: repository, result: { success: false } };
+    if (site.assets[assetIndex].kind === "audio" && site.settings.musicUrl === site.assets[assetIndex].url) {
+      site.settings.musicUrl = "";
+      site.settings.updatedAt = new Date().toISOString();
+    }
     site.assets.splice(assetIndex, 1);
     site.updatedAt = new Date().toISOString();
     return { data: repository, result: { success: true } };
