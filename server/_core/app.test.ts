@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
-import vercelHandler from "../../api/[...path]";
 import { createApp } from "./app";
+import vercelHandler from "./vercelEntry";
 
 describe("shared Express app factory", () => {
   let server: ReturnType<typeof createServer> | undefined;

@@ -32,3 +32,5 @@ Project configuration ยืนยันว่า Git link เชื่อมส
 ตั้งค่า Branch Tracking ของ Production สำเร็จเป็น `fullstack-backoffice-20260819` แล้ว และ Vercel แจ้งให้ redeploy commit จาก branch นี้เพื่อผูก production deployment ให้ตรงกับ branch ที่กำหนด.
 
 เริ่ม redeploy Production จาก Vercel หลังบันทึก Branch Tracking แล้ว โดยใช้ source code จาก deployment ของ branch `fullstack-backoffice-20260819`; กำลังรอสถานะ build ให้เสร็จ.
+
+deployment ใหม่จาก Git branch `fullstack-backoffice-20260819` สร้างสำเร็จและ Ready แต่ deployment แบบ CLI ล่าสุดที่ทดสอบ explicit API routes แสดงสถานะไม่สมบูรณ์ จึงกำลังตรวจ logs และ Git configuration ก่อนส่งมอบ.

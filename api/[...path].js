@@ -1,0 +1,1077 @@
+// server/_core/app.ts
+import express from "express";
+import { createExpressMiddleware } from "@trpc/server/adapters/express";
+
+// shared/const.ts
+var COOKIE_NAME = "app_session_id";
+var ONE_YEAR_MS = 1e3 * 60 * 60 * 24 * 365;
+var AXIOS_TIMEOUT_MS = 3e4;
+var UNAUTHED_ERR_MSG = "Please login (10001)";
+var NOT_ADMIN_ERR_MSG = "You do not have required permission (10002)";
+var OAUTH_STATE_COOKIE = "__Host-oauth_state";
+var decodeOAuthState = (state) => {
+  let decoded;
+  try {
+    decoded = atob(state);
+  } catch {
+    return { redirectUri: "" };
+  }
+  try {
+    const parsed = JSON.parse(decoded);
+    if (parsed && typeof parsed.redirectUri === "string") return parsed;
+  } catch {
+  }
+  return { redirectUri: decoded };
+};
+
+// server/_core/cookies.ts
+function isSecureRequest(req) {
+  if (req.protocol === "https") return true;
+  const forwardedProto = req.headers["x-forwarded-proto"];
+  if (!forwardedProto) return false;
+  const protoList = Array.isArray(forwardedProto) ? forwardedProto : forwardedProto.split(",");
+  return protoList.some((proto) => proto.trim().toLowerCase() === "https");
+}
+function getSessionCookieOptions(req) {
+  return {
+    httpOnly: true,
+    path: "/",
+    sameSite: "none",
+    secure: isSecureRequest(req)
+  };
+}
+
+// server/_core/systemRouter.ts
+import { z } from "zod";
+
+// server/_core/notification.ts
+import { TRPCError } from "@trpc/server";
+
+// server/_core/env.ts
+var ENV = {
+  appId: process.env.VITE_APP_ID ?? "",
+  cookieSecret: process.env.JWT_SECRET ?? "",
+  databaseUrl: process.env.DATABASE_URL ?? "",
+  oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
+  ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
+  isProduction: process.env.NODE_ENV === "production",
+  forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
+  forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? ""
+};
+
+// server/_core/notification.ts
+var TITLE_MAX_LENGTH = 1200;
+var CONTENT_MAX_LENGTH = 2e4;
+var trimValue = (value) => value.trim();
+var isNonEmptyString = (value) => typeof value === "string" && value.trim().length > 0;
+var buildEndpointUrl = (baseUrl) => {
+  const normalizedBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  return new URL(
+    "webdevtoken.v1.WebDevService/SendNotification",
+    normalizedBase
+  ).toString();
+};
+var validatePayload = (input) => {
+  if (!isNonEmptyString(input.title)) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Notification title is required."
+    });
+  }
+  if (!isNonEmptyString(input.content)) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Notification content is required."
+    });
+  }
+  const title = trimValue(input.title);
+  const content = trimValue(input.content);
+  if (title.length > TITLE_MAX_LENGTH) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Notification title must be at most ${TITLE_MAX_LENGTH} characters.`
+    });
+  }
+  if (content.length > CONTENT_MAX_LENGTH) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Notification content must be at most ${CONTENT_MAX_LENGTH} characters.`
+    });
+  }
+  return { title, content };
+};
+async function notifyOwner(payload) {
+  const { title, content } = validatePayload(payload);
+  if (!ENV.forgeApiUrl) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Notification service URL is not configured."
+    });
+  }
+  if (!ENV.forgeApiKey) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Notification service API key is not configured."
+    });
+  }
+  const endpoint = buildEndpointUrl(ENV.forgeApiUrl);
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${ENV.forgeApiKey}`,
+        "content-type": "application/json",
+        "connect-protocol-version": "1"
+      },
+      body: JSON.stringify({ title, content })
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      console.warn(
+        `[Notification] Failed to notify owner (${response.status} ${response.statusText})${detail ? `: ${detail}` : ""}`
+      );
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.warn("[Notification] Error calling notification service:", error);
+    return false;
+  }
+}
+
+// server/_core/trpc.ts
+import { initTRPC, TRPCError as TRPCError2 } from "@trpc/server";
+import superjson from "superjson";
+var t = initTRPC.context().create({
+  transformer: superjson
+});
+var router = t.router;
+var publicProcedure = t.procedure;
+var requireUser = t.middleware(async (opts) => {
+  const { ctx, next } = opts;
+  if (!ctx.user) {
+    throw new TRPCError2({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+  }
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user
+    }
+  });
+});
+var protectedProcedure = t.procedure.use(requireUser);
+var adminProcedure = t.procedure.use(
+  t.middleware(async (opts) => {
+    const { ctx, next } = opts;
+    if (!ctx.user || ctx.user.role !== "admin") {
+      throw new TRPCError2({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+    }
+    return next({
+      ctx: {
+        ...ctx,
+        user: ctx.user
+      }
+    });
+  })
+);
+
+// server/_core/systemRouter.ts
+var systemRouter = router({
+  health: publicProcedure.input(
+    z.object({
+      timestamp: z.number().min(0, "timestamp cannot be negative")
+    })
+  ).query(() => ({
+    ok: true
+  })),
+  notifyOwner: adminProcedure.input(
+    z.object({
+      title: z.string().min(1, "title is required"),
+      content: z.string().min(1, "content is required")
+    })
+  ).mutation(async ({ input }) => {
+    const delivered = await notifyOwner(input);
+    return {
+      success: delivered
+    };
+  })
+});
+
+// server/routers/site.ts
+import { TRPCError as TRPCError3 } from "@trpc/server";
+import { z as z2 } from "zod";
+
+// server/db.ts
+import { nanoid } from "nanoid";
+
+// server/githubStorage.ts
+var GitHubStorageError = class extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+    this.name = "GitHubStorageError";
+  }
+};
+var REPOSITORY_OWNER = "xEno6116";
+var REPOSITORY_NAME = "lovee-data";
+var API_ROOT = `https://api.github.com/repos/${REPOSITORY_OWNER}/${REPOSITORY_NAME}/contents`;
+var latestCommitByPath = /* @__PURE__ */ new Map();
+function requireToken() {
+  const token = process.env.GITHUB_DATA_TOKEN;
+  if (!token) {
+    throw new Error("\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E01\u0E33\u0E2B\u0E19\u0E14 GITHUB_DATA_TOKEN \u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A\u0E17\u0E35\u0E48\u0E40\u0E01\u0E47\u0E1A\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C");
+  }
+  return token;
+}
+function apiUrl(path, ref) {
+  const url = new URL(`${API_ROOT}/${path.split("/").map(encodeURIComponent).join("/")}`);
+  if (ref) url.searchParams.set("ref", ref);
+  return url.toString();
+}
+async function request(path, init = {}, ref) {
+  const response = await fetch(apiUrl(path, ref), {
+    ...init,
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${requireToken()}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      ...init.headers ?? {}
+    }
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new GitHubStorageError(payload.message || "\u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D GitHub data repository \u0E44\u0E14\u0E49", response.status);
+  }
+  return await response.json();
+}
+async function readJson(path, makeDefault) {
+  try {
+    const file = await request(path, {}, latestCommitByPath.get(path));
+    if (!file.content || file.encoding !== "base64" || !file.sha) {
+      throw new Error(`\u0E44\u0E1F\u0E25\u0E4C\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25 ${path} \u0E21\u0E35\u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07`);
+    }
+    const decoded = Buffer.from(file.content.replace(/\n/g, ""), "base64").toString("utf8");
+    return { data: JSON.parse(decoded), sha: file.sha };
+  } catch (error) {
+    if (error instanceof GitHubStorageError && error.status === 404) {
+      return { data: makeDefault() };
+    }
+    throw error;
+  }
+}
+async function writeJson(path, data, message, sha) {
+  const content = Buffer.from(`${JSON.stringify(data, null, 2)}
+`, "utf8").toString("base64");
+  const written = await request(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, content, ...sha ? { sha } : {} })
+  });
+  if (written.commit?.sha) latestCommitByPath.set(path, written.commit.sha);
+  return written;
+}
+async function updateJson(path, makeDefault, message, mutate) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data, sha } = await readJson(path, makeDefault);
+    const updated = await mutate(data);
+    try {
+      await writeJson(path, updated.data, message, sha);
+      return updated.result;
+    } catch (error) {
+      if (error instanceof GitHubStorageError && (error.status === 409 || error.status === 422) && attempt < 2) {
+        lastError = error;
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("\u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E2B\u0E25\u0E31\u0E07\u0E08\u0E32\u0E01\u0E25\u0E2D\u0E07\u0E0B\u0E49\u0E33\u0E41\u0E25\u0E49\u0E27");
+}
+
+// server/siteUtils.ts
+import { Buffer as Buffer2 } from "node:buffer";
+import { createHash } from "node:crypto";
+var DEFAULT_PIN = "0000";
+function hashPin(pin) {
+  return createHash("sha256").update(pin).digest("hex");
+}
+function isValidPin(pin) {
+  return /^\d{4}$/.test(pin);
+}
+function safeFileName(name) {
+  const normalized = name.normalize("NFKD").replace(/[^a-zA-Z0-9._-]/g, "-");
+  return normalized.replace(/-+/g, "-").replace(/^-|-$/g, "") || "upload";
+}
+function decodeDataUrl(dataUrl) {
+  const matched = dataUrl.match(/^data:([^;]+);base64,([\s\S]+)$/);
+  if (!matched) throw new Error("\u0E23\u0E39\u0E1B\u0E41\u0E1A\u0E1A\u0E44\u0E1F\u0E25\u0E4C\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07");
+  const [, mimeType, encoded] = matched;
+  const bytes = Buffer2.from(encoded, "base64");
+  if (!bytes.length) throw new Error("\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E44\u0E1F\u0E25\u0E4C");
+  return { mimeType, bytes };
+}
+function isAllowedMedia(kind, mimeType) {
+  if (kind === "image") return mimeType.startsWith("image/");
+  if (kind === "video") return mimeType.startsWith("video/");
+  return mimeType.startsWith("audio/");
+}
+
+// server/storage.ts
+function getForgeConfig() {
+  const forgeUrl = ENV.forgeApiUrl;
+  const forgeKey = ENV.forgeApiKey;
+  if (!forgeUrl || !forgeKey) {
+    throw new Error(
+      "Storage config missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
+    );
+  }
+  return { forgeUrl: forgeUrl.replace(/\/+$/, ""), forgeKey };
+}
+function normalizeKey(relKey) {
+  return relKey.replace(/^\/+/, "");
+}
+function appendHashSuffix(relKey) {
+  const hash = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+  const lastDot = relKey.lastIndexOf(".");
+  if (lastDot === -1) return `${relKey}_${hash}`;
+  return `${relKey.slice(0, lastDot)}_${hash}${relKey.slice(lastDot)}`;
+}
+async function storagePut(relKey, data, contentType = "application/octet-stream") {
+  const { forgeUrl, forgeKey } = getForgeConfig();
+  const key = appendHashSuffix(normalizeKey(relKey));
+  const presignUrl = new URL("v1/storage/presign/put", forgeUrl + "/");
+  presignUrl.searchParams.set("path", key);
+  const presignResp = await fetch(presignUrl, {
+    headers: { Authorization: `Bearer ${forgeKey}` }
+  });
+  if (!presignResp.ok) {
+    const msg = await presignResp.text().catch(() => presignResp.statusText);
+    throw new Error(`Storage presign failed (${presignResp.status}): ${msg}`);
+  }
+  const { url: s3Url } = await presignResp.json();
+  if (!s3Url) throw new Error("Forge returned empty presign URL");
+  const blob = typeof data === "string" ? new Blob([data], { type: contentType }) : new Blob([data], { type: contentType });
+  const uploadResp = await fetch(s3Url, {
+    method: "PUT",
+    headers: { "Content-Type": contentType },
+    body: blob
+  });
+  if (!uploadResp.ok) {
+    throw new Error(`Storage upload to S3 failed (${uploadResp.status})`);
+  }
+  return { key, url: `/manus-storage/${key}` };
+}
+
+// server/db.ts
+var SITE_DATA_PATH = "data/sites.json";
+var USER_DATA_PATH = "data/users.json";
+function emptyRepository() {
+  return { version: 1, nextSiteId: 1, nextSettingsId: 1, nextAssetId: 1, sites: [] };
+}
+function emptyUserRepository() {
+  return { version: 1, nextUserId: 1, users: [] };
+}
+async function readRepository() {
+  return readJson(SITE_DATA_PATH, emptyRepository);
+}
+async function readUserRepository() {
+  return readJson(USER_DATA_PATH, emptyUserRepository);
+}
+function getSite(repository, siteId) {
+  return repository.sites.find((site) => site.id === siteId);
+}
+function toClientSite({ settings: _settings, assets: _assets, ...site }) {
+  return site;
+}
+function toClientSettings({ pinHash: _pinHash, ...settings }) {
+  return settings;
+}
+function toClientAsset({ storageKey: _storageKey, ...asset }) {
+  return asset;
+}
+function sortAssets(assets) {
+  return [...assets].sort(
+    (left, right) => left.kind.localeCompare(right.kind) || left.sortOrder - right.sortOrder || left.id - right.id
+  );
+}
+function toApplicationUser(user) {
+  return {
+    ...user,
+    createdAt: new Date(user.createdAt),
+    updatedAt: new Date(user.updatedAt),
+    lastSignedIn: new Date(user.lastSignedIn)
+  };
+}
+async function upsertUser(user) {
+  if (!user.openId) throw new Error("User openId is required for upsert");
+  await updateJson(USER_DATA_PATH, emptyUserRepository, `anniversary: sync user ${user.openId}`, (repository) => {
+    const now = /* @__PURE__ */ new Date();
+    const existing = repository.users.find((item) => item.openId === user.openId);
+    const role = user.role ?? existing?.role ?? (user.openId === ENV.ownerOpenId ? "admin" : "user");
+    const lastSignedIn = user.lastSignedIn ?? now;
+    if (existing) {
+      existing.name = user.name !== void 0 ? user.name ?? null : existing.name;
+      existing.email = user.email !== void 0 ? user.email ?? null : existing.email;
+      existing.loginMethod = user.loginMethod !== void 0 ? user.loginMethod ?? null : existing.loginMethod;
+      existing.role = role;
+      existing.lastSignedIn = lastSignedIn.toISOString();
+      existing.updatedAt = now.toISOString();
+      return { data: repository, result: void 0 };
+    }
+    repository.users.push({
+      id: repository.nextUserId++,
+      openId: user.openId,
+      name: user.name ?? null,
+      email: user.email ?? null,
+      loginMethod: user.loginMethod ?? null,
+      role,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      lastSignedIn: lastSignedIn.toISOString()
+    });
+    return { data: repository, result: void 0 };
+  });
+}
+async function getUserByOpenId(openId) {
+  const { data } = await readUserRepository();
+  const user = data.users.find((item) => item.openId === openId);
+  return user ? toApplicationUser(user) : void 0;
+}
+async function listSitesForOwner(ownerId) {
+  const { data } = await readRepository();
+  return data.sites.filter((site) => site.ownerId === ownerId).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || right.id - left.id).map(toClientSite);
+}
+async function getOwnedSiteBySlug(ownerId, slug) {
+  const { data } = await readRepository();
+  return data.sites.find((site) => site.ownerId === ownerId && site.slug === slug);
+}
+async function createSiteForOwner(ownerId, input) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: create ${input.slug}`, (repository) => {
+    if (repository.sites.some((site2) => site2.slug === input.slug)) {
+      throw new Error("duplicate site slug");
+    }
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const siteId = repository.nextSiteId++;
+    const site = {
+      id: siteId,
+      ownerId,
+      title: input.title,
+      slug: input.slug,
+      createdAt: now,
+      updatedAt: now,
+      settings: {
+        id: repository.nextSettingsId++,
+        siteId,
+        pinHash: hashPin(DEFAULT_PIN),
+        startDate: "2024-04-06",
+        memoryMessage: "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E04\u0E27\u0E32\u0E21\u0E17\u0E23\u0E07\u0E08\u0E33\u0E02\u0E2D\u0E07\u0E40\u0E23\u0E32",
+        musicUrl: "",
+        createdAt: now,
+        updatedAt: now
+      },
+      assets: []
+    };
+    repository.sites.push(site);
+    return { data: repository, result: toClientSite(site) };
+  });
+}
+async function deleteSiteForOwner(ownerId, slug) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: delete ${slug}`, (repository) => {
+    const index = repository.sites.findIndex((site) => site.ownerId === ownerId && site.slug === slug);
+    if (index === -1) return { data: repository, result: { success: false } };
+    repository.sites.splice(index, 1);
+    return { data: repository, result: { success: true } };
+  });
+}
+async function getSiteSettings(siteId) {
+  const { data } = await readRepository();
+  return getSite(data, siteId)?.settings;
+}
+async function listMediaAssets(siteId, kind) {
+  const { data } = await readRepository();
+  const site = getSite(data, siteId);
+  if (!site) return [];
+  return sortAssets(kind ? site.assets.filter((asset) => asset.kind === kind) : site.assets);
+}
+async function getPrivateSiteData(ownerId, slug) {
+  const site = await getOwnedSiteBySlug(ownerId, slug);
+  if (!site) return void 0;
+  const assets = sortAssets(site.assets);
+  return {
+    site: toClientSite(site),
+    settings: {
+      id: site.settings.id,
+      startDate: site.settings.startDate,
+      memoryMessage: site.settings.memoryMessage,
+      musicUrl: site.settings.musicUrl
+    },
+    images: assets.filter((asset) => asset.kind === "image").map(toClientAsset),
+    videos: assets.filter((asset) => asset.kind === "video").map(toClientAsset)
+  };
+}
+async function getAdminSiteData(ownerId, slug) {
+  const site = await getOwnedSiteBySlug(ownerId, slug);
+  if (!site) return void 0;
+  return {
+    site: toClientSite(site),
+    settings: toClientSettings(site.settings),
+    assets: sortAssets(site.assets).map(toClientAsset)
+  };
+}
+async function verifySitePin(siteId, pin) {
+  const settings = await getSiteSettings(siteId);
+  return Boolean(settings && settings.pinHash === hashPin(pin));
+}
+async function updateSiteSettings(siteId, input) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update settings ${siteId}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) throw new Error("\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E01\u0E32\u0E23\u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32");
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    site.settings = {
+      ...site.settings,
+      memoryMessage: input.memoryMessage,
+      startDate: input.startDate,
+      musicUrl: input.musicUrl,
+      ...input.pin ? { pinHash: hashPin(input.pin) } : {},
+      updatedAt: now
+    };
+    site.updatedAt = now;
+    return { data: repository, result: toClientSettings(site.settings) };
+  });
+}
+async function setMusicUrl(siteId, musicUrl) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update music ${siteId}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) throw new Error("\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E40\u0E1E\u0E25\u0E07");
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    site.settings.musicUrl = musicUrl;
+    site.settings.updatedAt = now;
+    site.updatedAt = now;
+    return { data: repository, result: void 0 };
+  });
+}
+async function createMediaAsset(siteId, input) {
+  const fileName = safeFileName(input.originalName);
+  const storageKey = `anniversary/${siteId}/${input.kind}/${Date.now()}-${nanoid(10)}-${fileName}`;
+  const uploaded = await storagePut(storageKey, input.bytes, input.mimeType);
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: add ${input.kind} ${siteId}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) throw new Error("\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E2A\u0E37\u0E48\u0E2D");
+    const nextOrder = (site.assets.filter((asset) => asset.kind === input.kind).at(-1)?.sortOrder ?? -1) + 1;
+    const created = {
+      id: repository.nextAssetId++,
+      siteId,
+      kind: input.kind,
+      storageKey: uploaded.key,
+      url: uploaded.url,
+      originalName: input.originalName,
+      mimeType: input.mimeType,
+      sortOrder: nextOrder,
+      createdAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    site.assets.push(created);
+    site.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    return { data: repository, result: toClientAsset(created) };
+  });
+}
+async function deleteMediaAsset(siteId, id) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: remove media ${id}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) return { data: repository, result: { success: false } };
+    const assetIndex = site.assets.findIndex((asset) => asset.id === id);
+    if (assetIndex === -1) return { data: repository, result: { success: false } };
+    site.assets.splice(assetIndex, 1);
+    site.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    return { data: repository, result: { success: true } };
+  });
+}
+async function updateMediaOrder(siteId, id, sortOrder) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: reorder media ${id}`, (repository) => {
+    const site = getSite(repository, siteId);
+    const asset = site?.assets.find((item) => item.id === id);
+    if (!site || !asset) return { data: repository, result: { success: false } };
+    asset.sortOrder = sortOrder;
+    site.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    return { data: repository, result: { success: true } };
+  });
+}
+
+// server/routers/site.ts
+var slugSchema = z2.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "\u0E43\u0E0A\u0E49\u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23\u0E2D\u0E31\u0E07\u0E01\u0E24\u0E29 \u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 \u0E41\u0E25\u0E30\u0E02\u0E35\u0E14\u0E01\u0E25\u0E32\u0E07\u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19");
+var siteInput = z2.object({ slug: slugSchema });
+var settingsInput = z2.object({
+  slug: slugSchema,
+  memoryMessage: z2.string().trim().min(1).max(5e3),
+  startDate: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  pin: z2.string().regex(/^\d{4}$/).optional(),
+  musicUrl: z2.string().url().or(z2.literal(""))
+});
+async function requireOwnedSite(ownerId, slug) {
+  const site = await getOwnedSiteBySlug(ownerId, slug);
+  if (!site) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07" });
+  return site;
+}
+var siteRouter = router({
+  dashboard: router({
+    list: protectedProcedure.query(({ ctx }) => listSitesForOwner(ctx.user.id)),
+    create: protectedProcedure.input(z2.object({ title: z2.string().trim().min(1).max(160), slug: slugSchema })).mutation(async ({ ctx, input }) => {
+      try {
+        return await createSiteForOwner(ctx.user.id, input);
+      } catch (error) {
+        if (error instanceof Error && /duplicate|unique/i.test(error.message)) {
+          throw new TRPCError3({ code: "CONFLICT", message: "\u0E0A\u0E37\u0E48\u0E2D\u0E25\u0E34\u0E07\u0E01\u0E4C\u0E19\u0E35\u0E49\u0E16\u0E39\u0E01\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E41\u0E25\u0E49\u0E27 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E0A\u0E37\u0E48\u0E2D\u0E43\u0E2B\u0E21\u0E48" });
+        }
+        throw error;
+      }
+    }),
+    remove: protectedProcedure.input(siteInput).mutation(async ({ ctx, input }) => {
+      const result = await deleteSiteForOwner(ctx.user.id, input.slug);
+      if (!result.success) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E25\u0E1A" });
+      return result;
+    })
+  }),
+  private: router({
+    get: protectedProcedure.input(siteInput).query(async ({ ctx, input }) => {
+      const data = await getPrivateSiteData(ctx.user.id, input.slug);
+      if (!data) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07" });
+      return data;
+    }),
+    verifyPin: protectedProcedure.input(z2.object({ slug: slugSchema, pin: z2.string() })).mutation(async ({ ctx, input }) => {
+      if (!isValidPin(input.pin)) return { valid: false };
+      const site = await requireOwnedSite(ctx.user.id, input.slug);
+      return { valid: await verifySitePin(site.id, input.pin) };
+    })
+  }),
+  admin: router({
+    get: protectedProcedure.input(siteInput).query(async ({ ctx, input }) => {
+      const data = await getAdminSiteData(ctx.user.id, input.slug);
+      if (!data) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07" });
+      return data;
+    }),
+    saveSettings: protectedProcedure.input(settingsInput).mutation(async ({ ctx, input }) => {
+      const site = await requireOwnedSite(ctx.user.id, input.slug);
+      return updateSiteSettings(site.id, input);
+    }),
+    uploadMedia: protectedProcedure.input(z2.object({ slug: slugSchema, kind: z2.enum(["image", "video", "audio"]), fileName: z2.string().trim().min(1).max(255), dataUrl: z2.string().min(20).max(42e6) })).mutation(async ({ ctx, input }) => {
+      const site = await requireOwnedSite(ctx.user.id, input.slug);
+      const { mimeType, bytes } = decodeDataUrl(input.dataUrl);
+      if (!isAllowedMedia(input.kind, mimeType)) throw new TRPCError3({ code: "BAD_REQUEST", message: "\u0E0A\u0E19\u0E34\u0E14\u0E44\u0E1F\u0E25\u0E4C\u0E44\u0E21\u0E48\u0E15\u0E23\u0E07\u0E01\u0E31\u0E1A\u0E0A\u0E48\u0E2D\u0E07\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14" });
+      if (bytes.byteLength > 30 * 1024 * 1024) throw new TRPCError3({ code: "PAYLOAD_TOO_LARGE", message: "\u0E44\u0E1F\u0E25\u0E4C\u0E21\u0E35\u0E02\u0E19\u0E32\u0E14\u0E40\u0E01\u0E34\u0E19 30MB" });
+      if (input.kind === "video" && (await listMediaAssets(site.id, "video")).length >= 4) {
+        throw new TRPCError3({ code: "BAD_REQUEST", message: "\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14\u0E27\u0E34\u0E14\u0E35\u0E42\u0E2D\u0E44\u0E14\u0E49\u0E2A\u0E39\u0E07\u0E2A\u0E38\u0E14 4 \u0E44\u0E1F\u0E25\u0E4C" });
+      }
+      const created = await createMediaAsset(site.id, { kind: input.kind, originalName: input.fileName, mimeType, bytes });
+      if (input.kind === "audio") await setMusicUrl(site.id, created.url);
+      return created;
+    }),
+    removeMedia: protectedProcedure.input(z2.object({ slug: slugSchema, id: z2.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const site = await requireOwnedSite(ctx.user.id, input.slug);
+      return deleteMediaAsset(site.id, input.id);
+    }),
+    reorderMedia: protectedProcedure.input(z2.object({ slug: slugSchema, id: z2.number().int().positive(), sortOrder: z2.number().int().min(0) })).mutation(async ({ ctx, input }) => {
+      const site = await requireOwnedSite(ctx.user.id, input.slug);
+      return updateMediaOrder(site.id, input.id, input.sortOrder);
+    })
+  })
+});
+
+// server/routers.ts
+var appRouter = router({
+  system: systemRouter,
+  auth: router({
+    me: publicProcedure.query((opts) => opts.ctx.user),
+    logout: publicProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      return { success: true };
+    })
+  }),
+  site: siteRouter
+});
+
+// shared/_core/errors.ts
+var HttpError = class extends Error {
+  constructor(statusCode, message) {
+    super(message);
+    this.statusCode = statusCode;
+    this.name = "HttpError";
+  }
+};
+var ForbiddenError = (msg) => new HttpError(403, msg);
+
+// server/_core/sdk.ts
+import axios from "axios";
+import { parse as parseCookieHeader } from "cookie";
+import { SignJWT, jwtVerify } from "jose";
+var isNonEmptyString2 = (value) => typeof value === "string" && value.length > 0;
+var EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
+var GET_USER_INFO_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfo`;
+var GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfoWithJwt`;
+var OAuthService = class {
+  constructor(client) {
+    this.client = client;
+    console.log("[OAuth] Initialized with baseURL:", ENV.oAuthServerUrl);
+    if (!ENV.oAuthServerUrl) {
+      console.error(
+        "[OAuth] ERROR: OAUTH_SERVER_URL is not configured! Set OAUTH_SERVER_URL environment variable."
+      );
+    }
+  }
+  decodeState(state) {
+    return decodeOAuthState(state).redirectUri;
+  }
+  async getTokenByCode(code, state) {
+    const payload = {
+      clientId: ENV.appId,
+      grantType: "authorization_code",
+      code,
+      redirectUri: this.decodeState(state)
+    };
+    const { data } = await this.client.post(
+      EXCHANGE_TOKEN_PATH,
+      payload
+    );
+    return data;
+  }
+  async getUserInfoByToken(token) {
+    const { data } = await this.client.post(
+      GET_USER_INFO_PATH,
+      {
+        accessToken: token.accessToken
+      }
+    );
+    return data;
+  }
+};
+var createOAuthHttpClient = () => axios.create({
+  baseURL: ENV.oAuthServerUrl,
+  timeout: AXIOS_TIMEOUT_MS
+});
+var SDKServer = class {
+  client;
+  oauthService;
+  constructor(client = createOAuthHttpClient()) {
+    this.client = client;
+    this.oauthService = new OAuthService(this.client);
+  }
+  deriveLoginMethod(platforms, fallback) {
+    if (fallback && fallback.length > 0) return fallback;
+    if (!Array.isArray(platforms) || platforms.length === 0) return null;
+    const set = new Set(
+      platforms.filter((p) => typeof p === "string")
+    );
+    if (set.has("REGISTERED_PLATFORM_EMAIL")) return "email";
+    if (set.has("REGISTERED_PLATFORM_GOOGLE")) return "google";
+    if (set.has("REGISTERED_PLATFORM_APPLE")) return "apple";
+    if (set.has("REGISTERED_PLATFORM_MICROSOFT") || set.has("REGISTERED_PLATFORM_AZURE"))
+      return "microsoft";
+    if (set.has("REGISTERED_PLATFORM_GITHUB")) return "github";
+    const first = Array.from(set)[0];
+    return first ? first.toLowerCase() : null;
+  }
+  /**
+   * Exchange OAuth authorization code for access token
+   * @example
+   * const tokenResponse = await sdk.exchangeCodeForToken(code, state);
+   */
+  async exchangeCodeForToken(code, state) {
+    return this.oauthService.getTokenByCode(code, state);
+  }
+  /**
+   * Get user information using access token
+   * @example
+   * const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
+   */
+  async getUserInfo(accessToken) {
+    const data = await this.oauthService.getUserInfoByToken({
+      accessToken
+    });
+    const loginMethod = this.deriveLoginMethod(
+      data?.platforms,
+      data?.platform ?? data.platform ?? null
+    );
+    return {
+      ...data,
+      platform: loginMethod,
+      loginMethod
+    };
+  }
+  parseCookies(cookieHeader) {
+    if (!cookieHeader) {
+      return /* @__PURE__ */ new Map();
+    }
+    const parsed = parseCookieHeader(cookieHeader);
+    return new Map(Object.entries(parsed));
+  }
+  getSessionSecret() {
+    const secret = ENV.cookieSecret;
+    return new TextEncoder().encode(secret);
+  }
+  /**
+   * Create a session token for a Manus user openId
+   * @example
+   * const sessionToken = await sdk.createSessionToken(userInfo.openId);
+   */
+  async createSessionToken(openId, options = {}) {
+    return this.signSession(
+      {
+        openId,
+        appId: ENV.appId,
+        name: options.name || ""
+      },
+      options
+    );
+  }
+  async signSession(payload, options = {}) {
+    const issuedAt = Date.now();
+    const expiresInMs = options.expiresInMs ?? ONE_YEAR_MS;
+    const expirationSeconds = Math.floor((issuedAt + expiresInMs) / 1e3);
+    const secretKey = this.getSessionSecret();
+    return new SignJWT({
+      openId: payload.openId,
+      appId: payload.appId,
+      name: payload.name
+    }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setExpirationTime(expirationSeconds).sign(secretKey);
+  }
+  async verifySession(cookieValue) {
+    if (!cookieValue) {
+      console.warn("[Auth] Missing session cookie");
+      return null;
+    }
+    try {
+      const secretKey = this.getSessionSecret();
+      const { payload } = await jwtVerify(cookieValue, secretKey, {
+        algorithms: ["HS256"]
+      });
+      const { openId, appId, name } = payload;
+      if (!isNonEmptyString2(openId) || !isNonEmptyString2(appId) || !isNonEmptyString2(name)) {
+        console.warn("[Auth] Session payload missing required fields");
+        return null;
+      }
+      return {
+        openId,
+        appId,
+        name
+      };
+    } catch (error) {
+      console.warn("[Auth] Session verification failed", String(error));
+      return null;
+    }
+  }
+  async getUserInfoWithJwt(jwtToken) {
+    const payload = {
+      jwtToken,
+      projectId: ENV.appId
+    };
+    const { data } = await this.client.post(
+      GET_USER_INFO_WITH_JWT_PATH,
+      payload
+    );
+    const loginMethod = this.deriveLoginMethod(
+      data?.platforms,
+      data?.platform ?? data.platform ?? null
+    );
+    return {
+      ...data,
+      platform: loginMethod,
+      loginMethod
+    };
+  }
+  async authenticateRequest(req) {
+    const cookies = this.parseCookies(req.headers.cookie);
+    let sessionToken = cookies.get(COOKIE_NAME);
+    if (!sessionToken) {
+      const authHeader = req.headers.authorization;
+      if (typeof authHeader === "string" && authHeader.startsWith("Bearer ")) {
+        sessionToken = authHeader.slice(7);
+      }
+    }
+    const session = await this.verifySession(sessionToken);
+    if (!session) {
+      throw ForbiddenError("Invalid session cookie");
+    }
+    if (session.openId.startsWith(CRON_OPEN_ID_PREFIX)) {
+      const userInfo = await this.getUserInfoWithJwt(sessionToken ?? "");
+      const taskUid = userInfo.taskUid ?? null;
+      if (!taskUid) {
+        throw ForbiddenError("Cron session missing task_uid");
+      }
+      return buildCronUser(userInfo);
+    }
+    const sessionUserId = session.openId;
+    const signedInAt = /* @__PURE__ */ new Date();
+    let user = await getUserByOpenId(sessionUserId);
+    if (!user) {
+      try {
+        const userInfo = await this.getUserInfoWithJwt(sessionToken ?? "");
+        await upsertUser({
+          openId: userInfo.openId,
+          name: userInfo.name || null,
+          email: userInfo.email ?? null,
+          loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
+          lastSignedIn: signedInAt
+        });
+        user = await getUserByOpenId(userInfo.openId);
+      } catch (error) {
+        console.error("[Auth] Failed to sync user from OAuth:", error);
+        throw ForbiddenError("Failed to sync user info");
+      }
+    }
+    if (!user) {
+      throw ForbiddenError("User not found");
+    }
+    await upsertUser({
+      openId: user.openId,
+      lastSignedIn: signedInAt
+    });
+    return user;
+  }
+};
+var CRON_OPEN_ID_PREFIX = "cron_";
+function buildCronUser(userInfo) {
+  const now = /* @__PURE__ */ new Date();
+  return {
+    id: -1,
+    openId: userInfo.openId,
+    name: userInfo.name || "Manus Scheduled Task",
+    email: null,
+    loginMethod: null,
+    role: "user",
+    createdAt: now,
+    updatedAt: now,
+    lastSignedIn: now,
+    taskUid: userInfo.taskUid ?? void 0,
+    isCron: true
+  };
+}
+var sdk = new SDKServer();
+
+// server/_core/context.ts
+async function createContext(opts) {
+  let user = null;
+  try {
+    user = await sdk.authenticateRequest(opts.req);
+  } catch (error) {
+    user = null;
+  }
+  return {
+    req: opts.req,
+    res: opts.res,
+    user
+  };
+}
+
+// server/_core/oauth.ts
+import { parse as parseCookieHeader2 } from "cookie";
+function getQueryParam(req, key) {
+  const value = req.query[key];
+  return typeof value === "string" ? value : void 0;
+}
+function registerOAuthRoutes(app) {
+  app.get("/api/oauth/callback", async (req, res) => {
+    const code = getQueryParam(req, "code");
+    const state = getQueryParam(req, "state");
+    if (!code || !state) {
+      res.status(400).json({ error: "code and state are required" });
+      return;
+    }
+    const { nonce } = decodeOAuthState(state);
+    const expectedNonce = parseCookieHeader2(req.headers.cookie ?? "")[OAUTH_STATE_COOKIE];
+    if (!nonce || nonce !== expectedNonce) {
+      res.status(403).json({ error: "invalid oauth state" });
+      return;
+    }
+    res.clearCookie(OAUTH_STATE_COOKIE, { path: "/", secure: true, sameSite: "none" });
+    try {
+      const tokenResponse = await sdk.exchangeCodeForToken(code, state);
+      const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
+      if (!userInfo.openId) {
+        res.status(400).json({ error: "openId missing from user info" });
+        return;
+      }
+      await upsertUser({
+        openId: userInfo.openId,
+        name: userInfo.name || null,
+        email: userInfo.email ?? null,
+        loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
+        lastSignedIn: /* @__PURE__ */ new Date()
+      });
+      const sessionToken = await sdk.createSessionToken(userInfo.openId, {
+        name: userInfo.name || "",
+        expiresInMs: ONE_YEAR_MS
+      });
+      const cookieOptions = getSessionCookieOptions(req);
+      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      res.redirect(302, "/");
+    } catch (error) {
+      console.error("[OAuth] Callback failed", error);
+      res.status(500).json({ error: "OAuth callback failed" });
+    }
+  });
+}
+
+// server/_core/storageProxy.ts
+function registerStorageProxy(app) {
+  app.get(["/manus-storage/*", "/api/manus-storage/*"], async (req, res) => {
+    const key = req.params[0];
+    if (!key) {
+      res.status(400).send("Missing storage key");
+      return;
+    }
+    if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
+      res.status(500).send("Storage proxy not configured");
+      return;
+    }
+    try {
+      const forgeUrl = new URL(
+        "v1/storage/presign/get",
+        ENV.forgeApiUrl.replace(/\/+$/, "") + "/"
+      );
+      forgeUrl.searchParams.set("path", key);
+      const forgeResp = await fetch(forgeUrl, {
+        headers: { Authorization: `Bearer ${ENV.forgeApiKey}` }
+      });
+      if (!forgeResp.ok) {
+        const body = await forgeResp.text().catch(() => "");
+        console.error(`[StorageProxy] forge error: ${forgeResp.status} ${body}`);
+        res.status(502).send("Storage backend error");
+        return;
+      }
+      const { url } = await forgeResp.json();
+      if (!url) {
+        res.status(502).send("Empty signed URL from backend");
+        return;
+      }
+      res.set("Cache-Control", "no-store");
+      res.redirect(307, url);
+    } catch (err) {
+      console.error("[StorageProxy] failed:", err);
+      res.status(502).send("Storage proxy error");
+    }
+  });
+}
+
+// server/_core/app.ts
+function createApp() {
+  const app = express();
+  app.use(express.json({ limit: "50mb" }));
+  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  registerStorageProxy(app);
+  registerOAuthRoutes(app);
+  app.use(
+    "/api/trpc",
+    createExpressMiddleware({
+      router: appRouter,
+      createContext
+    })
+  );
+  return app;
+}
+
+// server/_core/vercelEntry.ts
+var vercelEntry_default = createApp();
+export {
+  vercelEntry_default as default
+};
