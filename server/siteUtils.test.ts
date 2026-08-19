@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PIN, decodeDataUrl, hashPin, isAllowedFont, isAllowedMedia, isValidPin, safeFileName } from "./siteUtils";
+import { DEFAULT_PIN, decodeDataUrl, hashPin, isAllowedFont, isAllowedMedia, isAllowedMp3Url, isValidPin, safeFileName } from "./siteUtils";
 
 describe("site utilities", () => {
   it("accepts only a four-digit PIN and keeps the default PIN stable", () => {
@@ -31,5 +31,12 @@ describe("site utilities", () => {
     expect(isAllowedFont("memory.woff2", "font/woff2")).toBe(true);
     expect(isAllowedFont("memory.ttf", "application/octet-stream")).toBe(true);
     expect(isAllowedFont("memory.exe", "application/octet-stream")).toBe(false);
+  });
+
+  it("accepts direct http(s) MP3 URLs only", () => {
+    expect(isAllowedMp3Url("https://cdn.example.com/music.mp3")).toBe(true);
+    expect(isAllowedMp3Url("https://cdn.example.com/download?file=music.mp3")).toBe(true);
+    expect(isAllowedMp3Url("javascript:alert(1)")).toBe(false);
+    expect(isAllowedMp3Url("https://cdn.example.com/music.wav")).toBe(false);
   });
 });

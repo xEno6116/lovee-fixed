@@ -178,6 +178,16 @@ function isAllowedFont(fileName, mimeType) {
   const extension = fileName.toLowerCase().match(/\.(woff2?|ttf|otf)$/)?.[1];
   return Boolean(extension) && (mimeType.startsWith("font/") || mimeType === "application/font-sfnt" || mimeType === "application/vnd.ms-fontobject" || mimeType === "application/octet-stream");
 }
+function isAllowedMp3Url(value) {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+    const candidates = [url.pathname, ...Array.from(url.searchParams.values())];
+    return candidates.some((candidate) => /\.mp3(?:$|[&#?])/i.test(candidate));
+  } catch {
+    return false;
+  }
+}
 
 // server/storage.ts
 function getForgeConfig() {
@@ -444,9 +454,10 @@ async function updateSiteSettings(siteId, input) {
       facebookUrl: input.facebookUrl,
       instagramUrl: input.instagramUrl,
       themeColor: input.themeColor,
+      musicUrl: input.musicUrl,
       ...input.features ? { features: input.features } : {},
       ...input.pin ? { pinHash: hashPin(input.pin) } : {},
-      revisionLog: [{ at: now, label: "\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u0E2A\u0E35\u0E41\u0E25\u0E30\u0E0A\u0E48\u0E2D\u0E07\u0E17\u0E32\u0E07\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D" }, ...site.settings.revisionLog ?? []].slice(0, 20),
+      revisionLog: [{ at: now, label: "\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u0E01\u0E32\u0E23\u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C" }, ...site.settings.revisionLog ?? []].slice(0, 20),
       updatedAt: now
     };
     site.updatedAt = now;
@@ -981,6 +992,7 @@ import { z as z2 } from "zod";
 var slugSchema = z2.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "\u0E43\u0E0A\u0E49\u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23\u0E2D\u0E31\u0E07\u0E01\u0E24\u0E29 \u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 \u0E41\u0E25\u0E30\u0E02\u0E35\u0E14\u0E01\u0E25\u0E32\u0E07\u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19");
 var siteInput = z2.object({ slug: slugSchema });
 var optionalHttpUrl = z2.string().url().refine((value) => /^https?:\/\//i.test(value), "\u0E43\u0E0A\u0E49\u0E25\u0E34\u0E07\u0E01\u0E4C http \u0E2B\u0E23\u0E37\u0E2D https \u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19").or(z2.literal(""));
+var optionalMp3Url = z2.string().trim().max(2048).refine((value) => !value || isAllowedMp3Url(value), "\u0E43\u0E0A\u0E49\u0E25\u0E34\u0E07\u0E01\u0E4C MP3 \u0E42\u0E14\u0E22\u0E15\u0E23\u0E07\u0E17\u0E35\u0E48\u0E02\u0E36\u0E49\u0E19\u0E15\u0E49\u0E19\u0E14\u0E49\u0E27\u0E22 http:// \u0E2B\u0E23\u0E37\u0E2D https:// \u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19");
 var timelineEntryInput = z2.object({ id: z2.string().min(1).max(80), title: z2.string().trim().min(1).max(120), date: z2.string().max(32), description: z2.string().trim().max(1e3) });
 var placeEntryInput = z2.object({ id: z2.string().min(1).max(80), name: z2.string().trim().min(1).max(120), mapUrl: optionalHttpUrl });
 var storyNoteInput = z2.object({ id: z2.string().min(1).max(80), title: z2.string().trim().min(1).max(120), body: z2.string().trim().max(3e3), publishAt: z2.string().max(32) });
@@ -1008,6 +1020,7 @@ var settingsInput = z2.object({
   slug: slugSchema,
   facebookUrl: optionalHttpUrl,
   instagramUrl: optionalHttpUrl,
+  musicUrl: optionalMp3Url,
   themeColor: z2.string().regex(/^#[0-9a-fA-F]{6}$/, "\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E2A\u0E35\u0E41\u0E1A\u0E1A #RRGGBB"),
   pin: z2.string().regex(/^\d{4}$/).optional(),
   features: featureInput
@@ -1062,11 +1075,11 @@ var siteRouter = router({
       const site = await requireOwnedSite(ctx.user.id, input.slug);
       return updateSiteSettings(site.id, input);
     }),
-    uploadMedia: protectedProcedure.input(z2.object({ slug: slugSchema, kind: z2.enum(["image", "video", "audio"]), fileName: z2.string().trim().min(1).max(255), dataUrl: z2.string().min(20).max(42e6) })).mutation(async ({ ctx, input }) => {
+    uploadMedia: protectedProcedure.input(z2.object({ slug: slugSchema, kind: z2.enum(["image", "video", "audio"]), fileName: z2.string().trim().min(1).max(255), dataUrl: z2.string().min(20).max(36e5) })).mutation(async ({ ctx, input }) => {
       const site = await requireOwnedSite(ctx.user.id, input.slug);
       const { mimeType, bytes } = decodeDataUrl(input.dataUrl);
       if (!isAllowedMedia(input.kind, mimeType)) throw new TRPCError3({ code: "BAD_REQUEST", message: "\u0E0A\u0E19\u0E34\u0E14\u0E44\u0E1F\u0E25\u0E4C\u0E44\u0E21\u0E48\u0E15\u0E23\u0E07\u0E01\u0E31\u0E1A\u0E0A\u0E48\u0E2D\u0E07\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14" });
-      if (bytes.byteLength > 30 * 1024 * 1024) throw new TRPCError3({ code: "PAYLOAD_TOO_LARGE", message: "\u0E44\u0E1F\u0E25\u0E4C\u0E21\u0E35\u0E02\u0E19\u0E32\u0E14\u0E40\u0E01\u0E34\u0E19 30MB" });
+      if (bytes.byteLength > 25e5) throw new TRPCError3({ code: "PAYLOAD_TOO_LARGE", message: "\u0E44\u0E1F\u0E25\u0E4C\u0E40\u0E01\u0E34\u0E19 2.5MB \u0E0B\u0E36\u0E48\u0E07\u0E40\u0E01\u0E34\u0E19\u0E02\u0E19\u0E32\u0E14\u0E17\u0E35\u0E48 Vercel \u0E23\u0E2D\u0E07\u0E23\u0E31\u0E1A\u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A\u0E01\u0E32\u0E23\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14\u0E41\u0E1A\u0E1A\u0E19\u0E35\u0E49" });
       if (input.kind === "video" && (await listMediaAssets(site.id, "video")).length >= 4) {
         throw new TRPCError3({ code: "BAD_REQUEST", message: "\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14\u0E27\u0E34\u0E14\u0E35\u0E42\u0E2D\u0E44\u0E14\u0E49\u0E2A\u0E39\u0E07\u0E2A\u0E38\u0E14 4 \u0E44\u0E1F\u0E25\u0E4C" });
       }
@@ -1074,11 +1087,11 @@ var siteRouter = router({
       if (input.kind === "audio") await setMusicUrl(site.id, created.url);
       return created;
     }),
-    uploadFont: protectedProcedure.input(z2.object({ slug: slugSchema, fileName: z2.string().trim().min(1).max(255), dataUrl: z2.string().min(20).max(15e6) })).mutation(async ({ ctx, input }) => {
+    uploadFont: protectedProcedure.input(z2.object({ slug: slugSchema, fileName: z2.string().trim().min(1).max(255), dataUrl: z2.string().min(20).max(36e5) })).mutation(async ({ ctx, input }) => {
       const site = await requireOwnedSite(ctx.user.id, input.slug);
       const { mimeType, bytes } = decodeDataUrl(input.dataUrl);
       if (!isAllowedFont(input.fileName, mimeType)) throw new TRPCError3({ code: "BAD_REQUEST", message: "\u0E23\u0E2D\u0E07\u0E23\u0E31\u0E1A\u0E40\u0E09\u0E1E\u0E32\u0E30\u0E44\u0E1F\u0E25\u0E4C WOFF, WOFF2, TTF \u0E2B\u0E23\u0E37\u0E2D OTF" });
-      if (bytes.byteLength > 8 * 1024 * 1024) throw new TRPCError3({ code: "PAYLOAD_TOO_LARGE", message: "\u0E1F\u0E2D\u0E19\u0E15\u0E4C\u0E21\u0E35\u0E02\u0E19\u0E32\u0E14\u0E40\u0E01\u0E34\u0E19 8MB" });
+      if (bytes.byteLength > 25e5) throw new TRPCError3({ code: "PAYLOAD_TOO_LARGE", message: "\u0E1F\u0E2D\u0E19\u0E15\u0E4C\u0E40\u0E01\u0E34\u0E19 2.5MB \u0E0B\u0E36\u0E48\u0E07\u0E40\u0E01\u0E34\u0E19\u0E02\u0E19\u0E32\u0E14\u0E17\u0E35\u0E48 Vercel \u0E23\u0E2D\u0E07\u0E23\u0E31\u0E1A\u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A\u0E01\u0E32\u0E23\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14\u0E41\u0E1A\u0E1A\u0E19\u0E35\u0E49" });
       return uploadCustomFont(site.id, { originalName: input.fileName, mimeType, bytes });
     }),
     removeMedia: protectedProcedure.input(z2.object({ slug: slugSchema, id: z2.number().int().positive() })).mutation(async ({ ctx, input }) => {

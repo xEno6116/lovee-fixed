@@ -64,7 +64,7 @@ export default function Home({ slug }: { slug: string }) {
   const toggleMusic = async () => {
     const audio = audioRef.current;
     if (!audio || !site?.settings.musicUrl) return;
-    try { if (audio.paused) { await audio.play(); setPlaying(true); } else { audio.pause(); setPlaying(false); } } catch { setPlaying(false); }
+    try { if (audio.paused) await audio.play(); else audio.pause(); } catch { setPlaying(false); }
   };
   const startPlayerDrag = (event: React.PointerEvent<HTMLDivElement>) => { playerDragRef.current = { startX: event.clientX, startY: event.clientY, baseX: playerPosition.x, baseY: playerPosition.y }; event.currentTarget.setPointerCapture(event.pointerId); };
   const movePlayer = (event: React.PointerEvent<HTMLDivElement>) => { const drag = playerDragRef.current; if (!drag) return; setPlayerPosition({ x: drag.baseX + event.clientX - drag.startX, y: drag.baseY + event.clientY - drag.startY }); };
@@ -90,7 +90,7 @@ export default function Home({ slug }: { slug: string }) {
 
   return <div className={`legacy-anniversary min-h-screen legacy-bg-${features.backgroundStyle} ${features.customFontUrl ? "legacy-font-custom" : `legacy-font-${features.fontFamily}`} ${nightMode ? "legacy-night" : ""}`} style={themeStyle}>
     {features.customFontUrl && <style>{`@font-face { font-family: 'AnniversaryCustom'; src: url('${features.customFontUrl}') format('woff2'); font-display: swap; }`}</style>}
-    <audio ref={audioRef} src={site.settings.musicUrl || undefined} loop onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} />
+    <audio ref={audioRef} src={site.settings.musicUrl || undefined} loop onPause={() => setPlaying(false)} onWaiting={() => setPlaying(false)} onPlaying={() => setPlaying(true)} onError={() => setPlaying(false)} />
     {!unlocked && <section className="legacy-lock-screen">
       <div className="mb-10 text-center"><h2>{site.site.title}</h2></div>
       <div className="legacy-dots" aria-label="PIN progress">{Array.from({ length: 4 }, (_, index) => <span key={index} className={index < pin.length ? "active" : ""} />)}</div>

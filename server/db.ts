@@ -327,7 +327,7 @@ export async function verifySitePin(siteId: number, pin: string) {
   return Boolean(settings && settings.pinHash === hashPin(pin));
 }
 
-export async function updateSiteSettings(siteId: number, input: { facebookUrl: string; instagramUrl: string; themeColor: string; pin?: string; features?: FeatureSettings }) {
+export async function updateSiteSettings(siteId: number, input: { facebookUrl: string; instagramUrl: string; themeColor: string; musicUrl: string; pin?: string; features?: FeatureSettings }) {
   return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update settings ${siteId}`, (repository) => {
     const site = getSite(repository, siteId);
     if (!site) throw new Error("ไม่พบเว็บไซต์สำหรับบันทึกการตั้งค่า");
@@ -337,9 +337,10 @@ export async function updateSiteSettings(siteId: number, input: { facebookUrl: s
       facebookUrl: input.facebookUrl,
       instagramUrl: input.instagramUrl,
       themeColor: input.themeColor,
+      musicUrl: input.musicUrl,
       ...(input.features ? { features: input.features } : {}),
       ...(input.pin ? { pinHash: hashPin(input.pin) } : {}),
-      revisionLog: [{ at: now, label: "อัปเดตสีและช่องทางติดต่อ" }, ...(site.settings.revisionLog ?? [])].slice(0, 20),
+      revisionLog: [{ at: now, label: "อัปเดตการตั้งค่าเว็บไซต์" }, ...(site.settings.revisionLog ?? [])].slice(0, 20),
       updatedAt: now,
     };
     site.updatedAt = now;

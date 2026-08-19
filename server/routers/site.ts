@@ -17,12 +17,13 @@ import {
   updateSiteSettings,
   verifySitePin,
 } from "../db";
-import { decodeDataUrl, isAllowedFont, isAllowedMedia, isValidPin } from "../siteUtils";
+import { decodeDataUrl, isAllowedFont, isAllowedMedia, isAllowedMp3Url, isValidPin } from "../siteUtils";
 import { protectedProcedure, router } from "../_core/trpc";
 
 const slugSchema = z.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
 const siteInput = z.object({ slug: slugSchema });
 const optionalHttpUrl = z.string().url().refine((value) => /^https?:\/\//i.test(value), "ใช้ลิงก์ http หรือ https เท่านั้น").or(z.literal(""));
+const optionalMp3Url = z.string().trim().max(2048).refine((value) => !value || isAllowedMp3Url(value), "ใช้ลิงก์ MP3 โดยตรงที่ขึ้นต้นด้วย http:// หรือ https:// เท่านั้น");
 const timelineEntryInput = z.object({ id: z.string().min(1).max(80), title: z.string().trim().min(1).max(120), date: z.string().max(32), description: z.string().trim().max(1000) });
 const placeEntryInput = z.object({ id: z.string().min(1).max(80), name: z.string().trim().min(1).max(120), mapUrl: optionalHttpUrl });
 const storyNoteInput = z.object({ id: z.string().min(1).max(80), title: z.string().trim().min(1).max(120), body: z.string().trim().max(3000), publishAt: z.string().max(32) });
@@ -36,6 +37,7 @@ const settingsInput = z.object({
   slug: slugSchema,
   facebookUrl: optionalHttpUrl,
   instagramUrl: optionalHttpUrl,
+  musicUrl: optionalMp3Url,
   themeColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "เลือกรหัสสีแบบ #RRGGBB"),
   pin: z.string().regex(/^\d{4}$/).optional(),
   features: featureInput,
@@ -107,12 +109,12 @@ export const siteRouter = router({
         return updateSiteSettings(site.id, input);
       }),
     uploadMedia: protectedProcedure
-      .input(z.object({ slug: slugSchema, kind: z.enum(["image", "video", "audio"]), fileName: z.string().trim().min(1).max(255), dataUrl: z.string().min(20).max(42_000_000) }))
+      .input(z.object({ slug: slugSchema, kind: z.enum(["image", "video", "audio"]), fileName: z.string().trim().min(1).max(255), dataUrl: z.string().min(20).max(3_600_000) }))
       .mutation(async ({ ctx, input }) => {
         const site = await requireOwnedSite(ctx.user.id, input.slug);
         const { mimeType, bytes } = decodeDataUrl(input.dataUrl);
         if (!isAllowedMedia(input.kind, mimeType)) throw new TRPCError({ code: "BAD_REQUEST", message: "ชนิดไฟล์ไม่ตรงกับช่องอัปโหลด" });
-        if (bytes.byteLength > 30 * 1024 * 1024) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "ไฟล์มีขนาดเกิน 30MB" });
+        if (bytes.byteLength > 2_500_000) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "ไฟล์เกิน 2.5MB ซึ่งเกินขนาดที่ Vercel รองรับสำหรับการอัปโหลดแบบนี้" });
         if (input.kind === "video" && (await listMediaAssets(site.id, "video")).length >= 4) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "อัปโหลดวิดีโอได้สูงสุด 4 ไฟล์" });
         }
@@ -121,12 +123,12 @@ export const siteRouter = router({
         return created;
       }),
     uploadFont: protectedProcedure
-      .input(z.object({ slug: slugSchema, fileName: z.string().trim().min(1).max(255), dataUrl: z.string().min(20).max(15_000_000) }))
+      .input(z.object({ slug: slugSchema, fileName: z.string().trim().min(1).max(255), dataUrl: z.string().min(20).max(3_600_000) }))
       .mutation(async ({ ctx, input }) => {
         const site = await requireOwnedSite(ctx.user.id, input.slug);
         const { mimeType, bytes } = decodeDataUrl(input.dataUrl);
         if (!isAllowedFont(input.fileName, mimeType)) throw new TRPCError({ code: "BAD_REQUEST", message: "รองรับเฉพาะไฟล์ WOFF, WOFF2, TTF หรือ OTF" });
-        if (bytes.byteLength > 8 * 1024 * 1024) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "ฟอนต์มีขนาดเกิน 8MB" });
+        if (bytes.byteLength > 2_500_000) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "ฟอนต์เกิน 2.5MB ซึ่งเกินขนาดที่ Vercel รองรับสำหรับการอัปโหลดแบบนี้" });
         return uploadCustomFont(site.id, { originalName: input.fileName, mimeType, bytes });
       }),
     removeMedia: protectedProcedure
