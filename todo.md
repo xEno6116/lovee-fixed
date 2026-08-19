@@ -47,7 +47,8 @@
 - [ ] เลือกและเชื่อมฐานข้อมูล production สำหรับ Vercel โดยคง schema หลายเว็บไซต์
 - [ ] ย้ายการจัดเก็บสื่อจาก storage เดิมไปยัง storage ที่รองรับ Vercel
 - [ ] เปลี่ยนระบบล็อกอินเจ้าของให้ทำงานบนโดเมน Vercel production
-- [ ] ตรวจสอบ repository GitHub ปลายทางและสิทธิ์การเข้าถึง
-- [ ] ส่งโค้ด full-stack เวอร์ชันล่าสุดขึ้น GitHub
-- [ ] ตรวจสอบไฟล์ที่จะส่งขึ้น GitHub ว่าไม่มี token, credential, session หรือข้อมูลลับ
-- [ ] ส่งโค้ดขึ้น branch แยกโดยไม่เขียนทับประวัติเดิมของ repository
+- [x] ตรวจสอบ repository GitHub ปลายทางและสิทธิ์การเข้าถึง
+- [x] ส่งโค้ด full-stack เวอร์ชันล่าสุดขึ้น GitHub
+- [x] ตรวจสอบไฟล์ที่จะส่งขึ้น GitHub ว่าไม่มี token, credential, session หรือข้อมูลลับ
+- [x] ส่งโค้ดขึ้น branch แยกโดยไม่เขียนทับประวัติเดิมของ repository
+- [x] ใช้วิธียืนยัน GitHub ทางเลือกที่ไม่ต้องให้ผู้ใช้กรอกรหัส device flow
