@@ -63,3 +63,14 @@
 - [x] ตรวจสอบการอ่านข้อมูลเว็บไซต์ที่ย้ายแล้วจาก private GitHub repository ผ่าน application data helpers
 - [x] ป้องกันไม่ให้ PIN hash, storage key และข้อมูล repository-only ถูกส่งจาก backend ไป browser
 - [x] ทดสอบการเขียน แก้ไข และลบข้อมูลผ่าน application helpers บน private GitHub repository จริง
+- [x] ย้าย user identity ที่ระบบ OAuth ใช้จาก MySQL ไป private GitHub repository เพื่อรองรับ Vercel แบบไม่ใช้ฐานข้อมูล
+- [x] ตรวจยืนยันสิทธิ์เจ้าของหลังย้าย user identity ออกจาก MySQL
+- [x] ย้ายข้อมูล user เจ้าของเดิมไปยังไฟล์ JSON ใน private GitHub repository
+- [x] ทดสอบว่า OAuth อ่าน user owner จาก private GitHub repository และคง owner id เดิม
+- [x] ทดสอบ protected route ด้วย owner identity ที่อ่านจาก private GitHub repository
+- [x] ทดสอบ signed session ผ่าน SDK.authenticateRequest ด้วย GitHub-backed owner identity
+- [x] สร้าง Express app factory สำหรับใช้ทั้ง local runtime และ Vercel serverless function
+- [ ] เพิ่ม Vercel routing สำหรับ tRPC, OAuth, storage proxy และ SPA routes
+- [ ] ตรวจ production build และทดสอบ serverless entry point โดยไม่ใช้ MySQL
+- [ ] ทดสอบ api serverless entry โดยตรงและตรวจ SPA fallback routes บน Vercel config
+- [x] จัดทำรายการ environment variables สำหรับ Vercel และตรวจ build/test เมื่อไม่มี DATABASE_URL

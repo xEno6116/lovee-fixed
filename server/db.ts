@@ -1,7 +1,5 @@
-import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
 import { nanoid } from "nanoid";
-import { type InsertUser, type User, users } from "../drizzle/schema";
+import type { InsertUser, User } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { updateJson, readJson } from "./githubStorage";
 import { DEFAULT_PIN, hashPin, safeFileName } from "./siteUtils";
@@ -52,6 +50,25 @@ type SiteRepository = {
 };
 
 const SITE_DATA_PATH = "data/sites.json";
+const USER_DATA_PATH = "data/users.json";
+
+type StoredUser = {
+  id: number;
+  openId: string;
+  name: string | null;
+  email: string | null;
+  loginMethod: string | null;
+  role: "admin" | "user";
+  createdAt: string;
+  updatedAt: string;
+  lastSignedIn: string;
+};
+
+type UserRepository = {
+  version: 1;
+  nextUserId: number;
+  users: StoredUser[];
+};
 
 type ClientSite = Omit<StoredSite, "settings" | "assets">;
 type ClientSettings = Omit<StoredSettings, "pinHash">;
@@ -61,8 +78,16 @@ function emptyRepository(): SiteRepository {
   return { version: 1, nextSiteId: 1, nextSettingsId: 1, nextAssetId: 1, sites: [] };
 }
 
+function emptyUserRepository(): UserRepository {
+  return { version: 1, nextUserId: 1, users: [] };
+}
+
 async function readRepository() {
   return readJson(SITE_DATA_PATH, emptyRepository);
+}
+
+async function readUserRepository() {
+  return readJson(USER_DATA_PATH, emptyUserRepository);
 }
 
 function getSite(repository: SiteRepository, siteId: number) {
@@ -87,41 +112,53 @@ function sortAssets(assets: StoredAsset[]) {
   );
 }
 
-let _db: ReturnType<typeof drizzle> | null = null;
-
-export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) _db = drizzle(process.env.DATABASE_URL);
-  return _db;
+function toApplicationUser(user: StoredUser): User {
+  return {
+    ...user,
+    createdAt: new Date(user.createdAt),
+    updatedAt: new Date(user.updatedAt),
+    lastSignedIn: new Date(user.lastSignedIn),
+  };
 }
 
-async function requireDb() {
-  const db = await getDb();
-  if (!db) throw new Error("ไม่สามารถเชื่อมต่อฐานข้อมูลผู้ใช้ได้");
-  return db;
-}
-
-/** User records remain compatible with the existing Manus OAuth session contract. */
+/** User records are kept in GitHub JSON while retaining the OAuth session contract. */
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) throw new Error("User openId is required for upsert");
-  const db = await requireDb();
-  const values: InsertUser = { openId: user.openId };
-  const updateSet: Record<string, unknown> = {};
-  for (const field of ["name", "email", "loginMethod"] as const) {
-    if (user[field] !== undefined) {
-      values[field] = user[field] ?? null;
-      updateSet[field] = user[field] ?? null;
+  await updateJson(USER_DATA_PATH, emptyUserRepository, `anniversary: sync user ${user.openId}`, (repository) => {
+    const now = new Date();
+    const existing = repository.users.find((item) => item.openId === user.openId);
+    const role = user.role ?? existing?.role ?? (user.openId === ENV.ownerOpenId ? "admin" : "user");
+    const lastSignedIn = user.lastSignedIn ?? now;
+
+    if (existing) {
+      existing.name = user.name !== undefined ? user.name ?? null : existing.name;
+      existing.email = user.email !== undefined ? user.email ?? null : existing.email;
+      existing.loginMethod = user.loginMethod !== undefined ? user.loginMethod ?? null : existing.loginMethod;
+      existing.role = role;
+      existing.lastSignedIn = lastSignedIn.toISOString();
+      existing.updatedAt = now.toISOString();
+      return { data: repository, result: undefined };
     }
-  }
-  values.role = user.role ?? (user.openId === ENV.ownerOpenId ? "admin" : "user");
-  updateSet.role = values.role;
-  values.lastSignedIn = user.lastSignedIn ?? new Date();
-  updateSet.lastSignedIn = values.lastSignedIn;
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+
+    repository.users.push({
+      id: repository.nextUserId++,
+      openId: user.openId,
+      name: user.name ?? null,
+      email: user.email ?? null,
+      loginMethod: user.loginMethod ?? null,
+      role,
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      lastSignedIn: lastSignedIn.toISOString(),
+    });
+    return { data: repository, result: undefined };
+  });
 }
 
 export async function getUserByOpenId(openId: string): Promise<User | undefined> {
-  const db = await requireDb();
-  return (await db.select().from(users).where(eq(users.openId, openId)).limit(1))[0];
+  const { data } = await readUserRepository();
+  const user = data.users.find((item) => item.openId === openId);
+  return user ? toApplicationUser(user) : undefined;
 }
 
 export async function listSitesForOwner(ownerId: number) {
