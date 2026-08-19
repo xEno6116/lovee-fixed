@@ -14,8 +14,9 @@ describe("Vercel deployment configuration", () => {
 
     expect(config.outputDirectory).toBe("dist/public");
     expect(config.routes).toEqual([
+      { src: "/api/(.*)", dest: "/api/[...path]" },
+      { src: "/manus-storage/(.*)", dest: "/api/[...path]" },
       { handle: "filesystem" },
-      { src: "/manus-storage/(.*)", dest: "/api/manus-storage/$1" },
       { src: "/(.*)", dest: "/index.html" },
     ]);
   });
