@@ -8,7 +8,6 @@ var ONE_YEAR_MS = 1e3 * 60 * 60 * 24 * 365;
 var AXIOS_TIMEOUT_MS = 3e4;
 var UNAUTHED_ERR_MSG = "Please login (10001)";
 var NOT_ADMIN_ERR_MSG = "You do not have required permission (10002)";
-var OAUTH_STATE_COOKIE = "__Host-oauth_state";
 var decodeOAuthState = (state) => {
   let decoded;
   try {
@@ -23,6 +22,10 @@ var decodeOAuthState = (state) => {
   }
   return { redirectUri: decoded };
 };
+
+// server/routers.ts
+import { TRPCError as TRPCError4 } from "@trpc/server";
+import { z as z3 } from "zod";
 
 // server/_core/cookies.ts
 function isSecureRequest(req) {
@@ -41,11 +44,11 @@ function getSessionCookieOptions(req) {
   };
 }
 
-// server/_core/systemRouter.ts
-import { z } from "zod";
+// server/_core/ownerAuth.ts
+import { timingSafeEqual } from "node:crypto";
 
-// server/_core/notification.ts
-import { TRPCError } from "@trpc/server";
+// server/db.ts
+import { nanoid } from "nanoid";
 
 // server/_core/env.ts
 var ENV = {
@@ -58,152 +61,6 @@ var ENV = {
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? ""
 };
-
-// server/_core/notification.ts
-var TITLE_MAX_LENGTH = 1200;
-var CONTENT_MAX_LENGTH = 2e4;
-var trimValue = (value) => value.trim();
-var isNonEmptyString = (value) => typeof value === "string" && value.trim().length > 0;
-var buildEndpointUrl = (baseUrl) => {
-  const normalizedBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
-  return new URL(
-    "webdevtoken.v1.WebDevService/SendNotification",
-    normalizedBase
-  ).toString();
-};
-var validatePayload = (input) => {
-  if (!isNonEmptyString(input.title)) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "Notification title is required."
-    });
-  }
-  if (!isNonEmptyString(input.content)) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "Notification content is required."
-    });
-  }
-  const title = trimValue(input.title);
-  const content = trimValue(input.content);
-  if (title.length > TITLE_MAX_LENGTH) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: `Notification title must be at most ${TITLE_MAX_LENGTH} characters.`
-    });
-  }
-  if (content.length > CONTENT_MAX_LENGTH) {
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: `Notification content must be at most ${CONTENT_MAX_LENGTH} characters.`
-    });
-  }
-  return { title, content };
-};
-async function notifyOwner(payload) {
-  const { title, content } = validatePayload(payload);
-  if (!ENV.forgeApiUrl) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Notification service URL is not configured."
-    });
-  }
-  if (!ENV.forgeApiKey) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Notification service API key is not configured."
-    });
-  }
-  const endpoint = buildEndpointUrl(ENV.forgeApiUrl);
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${ENV.forgeApiKey}`,
-        "content-type": "application/json",
-        "connect-protocol-version": "1"
-      },
-      body: JSON.stringify({ title, content })
-    });
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      console.warn(
-        `[Notification] Failed to notify owner (${response.status} ${response.statusText})${detail ? `: ${detail}` : ""}`
-      );
-      return false;
-    }
-    return true;
-  } catch (error) {
-    console.warn("[Notification] Error calling notification service:", error);
-    return false;
-  }
-}
-
-// server/_core/trpc.ts
-import { initTRPC, TRPCError as TRPCError2 } from "@trpc/server";
-import superjson from "superjson";
-var t = initTRPC.context().create({
-  transformer: superjson
-});
-var router = t.router;
-var publicProcedure = t.procedure;
-var requireUser = t.middleware(async (opts) => {
-  const { ctx, next } = opts;
-  if (!ctx.user) {
-    throw new TRPCError2({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
-  }
-  return next({
-    ctx: {
-      ...ctx,
-      user: ctx.user
-    }
-  });
-});
-var protectedProcedure = t.procedure.use(requireUser);
-var adminProcedure = t.procedure.use(
-  t.middleware(async (opts) => {
-    const { ctx, next } = opts;
-    if (!ctx.user || ctx.user.role !== "admin") {
-      throw new TRPCError2({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
-    }
-    return next({
-      ctx: {
-        ...ctx,
-        user: ctx.user
-      }
-    });
-  })
-);
-
-// server/_core/systemRouter.ts
-var systemRouter = router({
-  health: publicProcedure.input(
-    z.object({
-      timestamp: z.number().min(0, "timestamp cannot be negative")
-    })
-  ).query(() => ({
-    ok: true
-  })),
-  notifyOwner: adminProcedure.input(
-    z.object({
-      title: z.string().min(1, "title is required"),
-      content: z.string().min(1, "content is required")
-    })
-  ).mutation(async ({ input }) => {
-    const delivered = await notifyOwner(input);
-    return {
-      success: delivered
-    };
-  })
-});
-
-// server/routers/site.ts
-import { TRPCError as TRPCError3 } from "@trpc/server";
-import { z as z2 } from "zod";
-
-// server/db.ts
-import { nanoid } from "nanoid";
 
 // server/githubStorage.ts
 var GitHubStorageError = class extends Error {
@@ -598,99 +455,6 @@ async function updateMediaOrder(siteId, id, sortOrder) {
   });
 }
 
-// server/routers/site.ts
-var slugSchema = z2.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "\u0E43\u0E0A\u0E49\u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23\u0E2D\u0E31\u0E07\u0E01\u0E24\u0E29 \u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 \u0E41\u0E25\u0E30\u0E02\u0E35\u0E14\u0E01\u0E25\u0E32\u0E07\u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19");
-var siteInput = z2.object({ slug: slugSchema });
-var settingsInput = z2.object({
-  slug: slugSchema,
-  memoryMessage: z2.string().trim().min(1).max(5e3),
-  startDate: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  pin: z2.string().regex(/^\d{4}$/).optional(),
-  musicUrl: z2.string().url().or(z2.literal(""))
-});
-async function requireOwnedSite(ownerId, slug) {
-  const site = await getOwnedSiteBySlug(ownerId, slug);
-  if (!site) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07" });
-  return site;
-}
-var siteRouter = router({
-  dashboard: router({
-    list: protectedProcedure.query(({ ctx }) => listSitesForOwner(ctx.user.id)),
-    create: protectedProcedure.input(z2.object({ title: z2.string().trim().min(1).max(160), slug: slugSchema })).mutation(async ({ ctx, input }) => {
-      try {
-        return await createSiteForOwner(ctx.user.id, input);
-      } catch (error) {
-        if (error instanceof Error && /duplicate|unique/i.test(error.message)) {
-          throw new TRPCError3({ code: "CONFLICT", message: "\u0E0A\u0E37\u0E48\u0E2D\u0E25\u0E34\u0E07\u0E01\u0E4C\u0E19\u0E35\u0E49\u0E16\u0E39\u0E01\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E41\u0E25\u0E49\u0E27 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E0A\u0E37\u0E48\u0E2D\u0E43\u0E2B\u0E21\u0E48" });
-        }
-        throw error;
-      }
-    }),
-    remove: protectedProcedure.input(siteInput).mutation(async ({ ctx, input }) => {
-      const result = await deleteSiteForOwner(ctx.user.id, input.slug);
-      if (!result.success) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E25\u0E1A" });
-      return result;
-    })
-  }),
-  private: router({
-    get: protectedProcedure.input(siteInput).query(async ({ ctx, input }) => {
-      const data = await getPrivateSiteData(ctx.user.id, input.slug);
-      if (!data) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07" });
-      return data;
-    }),
-    verifyPin: protectedProcedure.input(z2.object({ slug: slugSchema, pin: z2.string() })).mutation(async ({ ctx, input }) => {
-      if (!isValidPin(input.pin)) return { valid: false };
-      const site = await requireOwnedSite(ctx.user.id, input.slug);
-      return { valid: await verifySitePin(site.id, input.pin) };
-    })
-  }),
-  admin: router({
-    get: protectedProcedure.input(siteInput).query(async ({ ctx, input }) => {
-      const data = await getAdminSiteData(ctx.user.id, input.slug);
-      if (!data) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07" });
-      return data;
-    }),
-    saveSettings: protectedProcedure.input(settingsInput).mutation(async ({ ctx, input }) => {
-      const site = await requireOwnedSite(ctx.user.id, input.slug);
-      return updateSiteSettings(site.id, input);
-    }),
-    uploadMedia: protectedProcedure.input(z2.object({ slug: slugSchema, kind: z2.enum(["image", "video", "audio"]), fileName: z2.string().trim().min(1).max(255), dataUrl: z2.string().min(20).max(42e6) })).mutation(async ({ ctx, input }) => {
-      const site = await requireOwnedSite(ctx.user.id, input.slug);
-      const { mimeType, bytes } = decodeDataUrl(input.dataUrl);
-      if (!isAllowedMedia(input.kind, mimeType)) throw new TRPCError3({ code: "BAD_REQUEST", message: "\u0E0A\u0E19\u0E34\u0E14\u0E44\u0E1F\u0E25\u0E4C\u0E44\u0E21\u0E48\u0E15\u0E23\u0E07\u0E01\u0E31\u0E1A\u0E0A\u0E48\u0E2D\u0E07\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14" });
-      if (bytes.byteLength > 30 * 1024 * 1024) throw new TRPCError3({ code: "PAYLOAD_TOO_LARGE", message: "\u0E44\u0E1F\u0E25\u0E4C\u0E21\u0E35\u0E02\u0E19\u0E32\u0E14\u0E40\u0E01\u0E34\u0E19 30MB" });
-      if (input.kind === "video" && (await listMediaAssets(site.id, "video")).length >= 4) {
-        throw new TRPCError3({ code: "BAD_REQUEST", message: "\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14\u0E27\u0E34\u0E14\u0E35\u0E42\u0E2D\u0E44\u0E14\u0E49\u0E2A\u0E39\u0E07\u0E2A\u0E38\u0E14 4 \u0E44\u0E1F\u0E25\u0E4C" });
-      }
-      const created = await createMediaAsset(site.id, { kind: input.kind, originalName: input.fileName, mimeType, bytes });
-      if (input.kind === "audio") await setMusicUrl(site.id, created.url);
-      return created;
-    }),
-    removeMedia: protectedProcedure.input(z2.object({ slug: slugSchema, id: z2.number().int().positive() })).mutation(async ({ ctx, input }) => {
-      const site = await requireOwnedSite(ctx.user.id, input.slug);
-      return deleteMediaAsset(site.id, input.id);
-    }),
-    reorderMedia: protectedProcedure.input(z2.object({ slug: slugSchema, id: z2.number().int().positive(), sortOrder: z2.number().int().min(0) })).mutation(async ({ ctx, input }) => {
-      const site = await requireOwnedSite(ctx.user.id, input.slug);
-      return updateMediaOrder(site.id, input.id, input.sortOrder);
-    })
-  })
-});
-
-// server/routers.ts
-var appRouter = router({
-  system: systemRouter,
-  auth: router({
-    me: publicProcedure.query((opts) => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return { success: true };
-    })
-  }),
-  site: siteRouter
-});
-
 // shared/_core/errors.ts
 var HttpError = class extends Error {
   constructor(statusCode, message) {
@@ -705,7 +469,7 @@ var ForbiddenError = (msg) => new HttpError(403, msg);
 import axios from "axios";
 import { parse as parseCookieHeader } from "cookie";
 import { SignJWT, jwtVerify } from "jose";
-var isNonEmptyString2 = (value) => typeof value === "string" && value.length > 0;
+var isNonEmptyString = (value) => typeof value === "string" && value.length > 0;
 var EXCHANGE_TOKEN_PATH = `/webdev.v1.WebDevAuthPublicService/ExchangeToken`;
 var GET_USER_INFO_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfo`;
 var GET_USER_INFO_WITH_JWT_PATH = `/webdev.v1.WebDevAuthPublicService/GetUserInfoWithJwt`;
@@ -846,7 +610,7 @@ var SDKServer = class {
         algorithms: ["HS256"]
       });
       const { openId, appId, name } = payload;
-      if (!isNonEmptyString2(openId) || !isNonEmptyString2(appId) || !isNonEmptyString2(name)) {
+      if (!isNonEmptyString(openId) || !isNonEmptyString(appId) || !isNonEmptyString(name)) {
         console.warn("[Auth] Session payload missing required fields");
         return null;
       }
@@ -948,6 +712,301 @@ function buildCronUser(userInfo) {
 }
 var sdk = new SDKServer();
 
+// server/_core/ownerAuth.ts
+function isOwnerPasswordValid(password) {
+  const configuredPassword = process.env.OWNER_LOGIN_PASSWORD;
+  if (typeof password !== "string" || !configuredPassword) return false;
+  const candidate = Buffer.from(password, "utf8");
+  const expected = Buffer.from(configuredPassword, "utf8");
+  return candidate.length === expected.length && timingSafeEqual(candidate, expected);
+}
+async function issueOwnerSession(req, res) {
+  if (!ENV.ownerOpenId) {
+    throw new Error("owner login is not configured");
+  }
+  const owner = await getUserByOpenId(ENV.ownerOpenId);
+  if (!owner || owner.role !== "admin") {
+    throw new Error("owner account is not available");
+  }
+  const sessionToken = await sdk.createSessionToken(owner.openId, {
+    name: owner.name || "Owner",
+    expiresInMs: ONE_YEAR_MS
+  });
+  res.cookie(COOKIE_NAME, sessionToken, {
+    ...getSessionCookieOptions(req),
+    maxAge: ONE_YEAR_MS
+  });
+  return { success: true };
+}
+function registerOwnerPasswordAuthRoutes(app) {
+  app.post("/api/owner-auth/login", async (req, res) => {
+    try {
+      if (!isOwnerPasswordValid(req.body?.password)) {
+        res.status(401).json({ error: "\u0E23\u0E2B\u0E31\u0E2A\u0E1C\u0E48\u0E32\u0E19\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07" });
+        return;
+      }
+      const result = await issueOwnerSession(req, res);
+      res.status(200).json(result);
+    } catch (error) {
+      console.error("[OwnerAuth] Login failed", error);
+      res.status(500).json({ error: "\u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E44\u0E14\u0E49" });
+    }
+  });
+  app.post("/api/owner-auth/logout", (req, res) => {
+    res.clearCookie(COOKIE_NAME, getSessionCookieOptions(req));
+    res.status(200).json({ success: true });
+  });
+}
+
+// server/_core/systemRouter.ts
+import { z } from "zod";
+
+// server/_core/notification.ts
+import { TRPCError } from "@trpc/server";
+var TITLE_MAX_LENGTH = 1200;
+var CONTENT_MAX_LENGTH = 2e4;
+var trimValue = (value) => value.trim();
+var isNonEmptyString2 = (value) => typeof value === "string" && value.trim().length > 0;
+var buildEndpointUrl = (baseUrl) => {
+  const normalizedBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+  return new URL(
+    "webdevtoken.v1.WebDevService/SendNotification",
+    normalizedBase
+  ).toString();
+};
+var validatePayload = (input) => {
+  if (!isNonEmptyString2(input.title)) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Notification title is required."
+    });
+  }
+  if (!isNonEmptyString2(input.content)) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Notification content is required."
+    });
+  }
+  const title = trimValue(input.title);
+  const content = trimValue(input.content);
+  if (title.length > TITLE_MAX_LENGTH) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Notification title must be at most ${TITLE_MAX_LENGTH} characters.`
+    });
+  }
+  if (content.length > CONTENT_MAX_LENGTH) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: `Notification content must be at most ${CONTENT_MAX_LENGTH} characters.`
+    });
+  }
+  return { title, content };
+};
+async function notifyOwner(payload) {
+  const { title, content } = validatePayload(payload);
+  if (!ENV.forgeApiUrl) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Notification service URL is not configured."
+    });
+  }
+  if (!ENV.forgeApiKey) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Notification service API key is not configured."
+    });
+  }
+  const endpoint = buildEndpointUrl(ENV.forgeApiUrl);
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${ENV.forgeApiKey}`,
+        "content-type": "application/json",
+        "connect-protocol-version": "1"
+      },
+      body: JSON.stringify({ title, content })
+    });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      console.warn(
+        `[Notification] Failed to notify owner (${response.status} ${response.statusText})${detail ? `: ${detail}` : ""}`
+      );
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.warn("[Notification] Error calling notification service:", error);
+    return false;
+  }
+}
+
+// server/_core/trpc.ts
+import { initTRPC, TRPCError as TRPCError2 } from "@trpc/server";
+import superjson from "superjson";
+var t = initTRPC.context().create({
+  transformer: superjson
+});
+var router = t.router;
+var publicProcedure = t.procedure;
+var requireUser = t.middleware(async (opts) => {
+  const { ctx, next } = opts;
+  if (!ctx.user) {
+    throw new TRPCError2({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
+  }
+  return next({
+    ctx: {
+      ...ctx,
+      user: ctx.user
+    }
+  });
+});
+var protectedProcedure = t.procedure.use(requireUser);
+var adminProcedure = t.procedure.use(
+  t.middleware(async (opts) => {
+    const { ctx, next } = opts;
+    if (!ctx.user || ctx.user.role !== "admin") {
+      throw new TRPCError2({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
+    }
+    return next({
+      ctx: {
+        ...ctx,
+        user: ctx.user
+      }
+    });
+  })
+);
+
+// server/_core/systemRouter.ts
+var systemRouter = router({
+  health: publicProcedure.input(
+    z.object({
+      timestamp: z.number().min(0, "timestamp cannot be negative")
+    })
+  ).query(() => ({
+    ok: true
+  })),
+  notifyOwner: adminProcedure.input(
+    z.object({
+      title: z.string().min(1, "title is required"),
+      content: z.string().min(1, "content is required")
+    })
+  ).mutation(async ({ input }) => {
+    const delivered = await notifyOwner(input);
+    return {
+      success: delivered
+    };
+  })
+});
+
+// server/routers/site.ts
+import { TRPCError as TRPCError3 } from "@trpc/server";
+import { z as z2 } from "zod";
+var slugSchema = z2.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "\u0E43\u0E0A\u0E49\u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23\u0E2D\u0E31\u0E07\u0E01\u0E24\u0E29 \u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 \u0E41\u0E25\u0E30\u0E02\u0E35\u0E14\u0E01\u0E25\u0E32\u0E07\u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19");
+var siteInput = z2.object({ slug: slugSchema });
+var settingsInput = z2.object({
+  slug: slugSchema,
+  memoryMessage: z2.string().trim().min(1).max(5e3),
+  startDate: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  pin: z2.string().regex(/^\d{4}$/).optional(),
+  musicUrl: z2.string().url().or(z2.literal(""))
+});
+async function requireOwnedSite(ownerId, slug) {
+  const site = await getOwnedSiteBySlug(ownerId, slug);
+  if (!site) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07" });
+  return site;
+}
+var siteRouter = router({
+  dashboard: router({
+    list: protectedProcedure.query(({ ctx }) => listSitesForOwner(ctx.user.id)),
+    create: protectedProcedure.input(z2.object({ title: z2.string().trim().min(1).max(160), slug: slugSchema })).mutation(async ({ ctx, input }) => {
+      try {
+        return await createSiteForOwner(ctx.user.id, input);
+      } catch (error) {
+        if (error instanceof Error && /duplicate|unique/i.test(error.message)) {
+          throw new TRPCError3({ code: "CONFLICT", message: "\u0E0A\u0E37\u0E48\u0E2D\u0E25\u0E34\u0E07\u0E01\u0E4C\u0E19\u0E35\u0E49\u0E16\u0E39\u0E01\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E41\u0E25\u0E49\u0E27 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E0A\u0E37\u0E48\u0E2D\u0E43\u0E2B\u0E21\u0E48" });
+        }
+        throw error;
+      }
+    }),
+    remove: protectedProcedure.input(siteInput).mutation(async ({ ctx, input }) => {
+      const result = await deleteSiteForOwner(ctx.user.id, input.slug);
+      if (!result.success) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E25\u0E1A" });
+      return result;
+    })
+  }),
+  private: router({
+    get: protectedProcedure.input(siteInput).query(async ({ ctx, input }) => {
+      const data = await getPrivateSiteData(ctx.user.id, input.slug);
+      if (!data) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07" });
+      return data;
+    }),
+    verifyPin: protectedProcedure.input(z2.object({ slug: slugSchema, pin: z2.string() })).mutation(async ({ ctx, input }) => {
+      if (!isValidPin(input.pin)) return { valid: false };
+      const site = await requireOwnedSite(ctx.user.id, input.slug);
+      return { valid: await verifySitePin(site.id, input.pin) };
+    })
+  }),
+  admin: router({
+    get: protectedProcedure.input(siteInput).query(async ({ ctx, input }) => {
+      const data = await getAdminSiteData(ctx.user.id, input.slug);
+      if (!data) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07" });
+      return data;
+    }),
+    saveSettings: protectedProcedure.input(settingsInput).mutation(async ({ ctx, input }) => {
+      const site = await requireOwnedSite(ctx.user.id, input.slug);
+      return updateSiteSettings(site.id, input);
+    }),
+    uploadMedia: protectedProcedure.input(z2.object({ slug: slugSchema, kind: z2.enum(["image", "video", "audio"]), fileName: z2.string().trim().min(1).max(255), dataUrl: z2.string().min(20).max(42e6) })).mutation(async ({ ctx, input }) => {
+      const site = await requireOwnedSite(ctx.user.id, input.slug);
+      const { mimeType, bytes } = decodeDataUrl(input.dataUrl);
+      if (!isAllowedMedia(input.kind, mimeType)) throw new TRPCError3({ code: "BAD_REQUEST", message: "\u0E0A\u0E19\u0E34\u0E14\u0E44\u0E1F\u0E25\u0E4C\u0E44\u0E21\u0E48\u0E15\u0E23\u0E07\u0E01\u0E31\u0E1A\u0E0A\u0E48\u0E2D\u0E07\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14" });
+      if (bytes.byteLength > 30 * 1024 * 1024) throw new TRPCError3({ code: "PAYLOAD_TOO_LARGE", message: "\u0E44\u0E1F\u0E25\u0E4C\u0E21\u0E35\u0E02\u0E19\u0E32\u0E14\u0E40\u0E01\u0E34\u0E19 30MB" });
+      if (input.kind === "video" && (await listMediaAssets(site.id, "video")).length >= 4) {
+        throw new TRPCError3({ code: "BAD_REQUEST", message: "\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14\u0E27\u0E34\u0E14\u0E35\u0E42\u0E2D\u0E44\u0E14\u0E49\u0E2A\u0E39\u0E07\u0E2A\u0E38\u0E14 4 \u0E44\u0E1F\u0E25\u0E4C" });
+      }
+      const created = await createMediaAsset(site.id, { kind: input.kind, originalName: input.fileName, mimeType, bytes });
+      if (input.kind === "audio") await setMusicUrl(site.id, created.url);
+      return created;
+    }),
+    removeMedia: protectedProcedure.input(z2.object({ slug: slugSchema, id: z2.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const site = await requireOwnedSite(ctx.user.id, input.slug);
+      return deleteMediaAsset(site.id, input.id);
+    }),
+    reorderMedia: protectedProcedure.input(z2.object({ slug: slugSchema, id: z2.number().int().positive(), sortOrder: z2.number().int().min(0) })).mutation(async ({ ctx, input }) => {
+      const site = await requireOwnedSite(ctx.user.id, input.slug);
+      return updateMediaOrder(site.id, input.id, input.sortOrder);
+    })
+  })
+});
+
+// server/routers.ts
+var appRouter = router({
+  system: systemRouter,
+  auth: router({
+    me: publicProcedure.query((opts) => opts.ctx.user),
+    login: publicProcedure.input(z3.object({ password: z3.string().min(1).max(256) })).mutation(async ({ ctx, input }) => {
+      if (!isOwnerPasswordValid(input.password)) {
+        throw new TRPCError4({ code: "UNAUTHORIZED", message: "\u0E23\u0E2B\u0E31\u0E2A\u0E1C\u0E48\u0E32\u0E19\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07" });
+      }
+      try {
+        return await issueOwnerSession(ctx.req, ctx.res);
+      } catch (error) {
+        console.error("[OwnerAuth] Login failed", error);
+        throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "\u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E44\u0E14\u0E49" });
+      }
+    }),
+    logout: publicProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      return { success: true };
+    })
+  }),
+  site: siteRouter
+});
+
 // server/_core/context.ts
 async function createContext(opts) {
   let user = null;
@@ -961,55 +1020,6 @@ async function createContext(opts) {
     res: opts.res,
     user
   };
-}
-
-// server/_core/oauth.ts
-import { parse as parseCookieHeader2 } from "cookie";
-function getQueryParam(req, key) {
-  const value = req.query[key];
-  return typeof value === "string" ? value : void 0;
-}
-function registerOAuthRoutes(app) {
-  app.get("/api/oauth/callback", async (req, res) => {
-    const code = getQueryParam(req, "code");
-    const state = getQueryParam(req, "state");
-    if (!code || !state) {
-      res.status(400).json({ error: "code and state are required" });
-      return;
-    }
-    const { nonce } = decodeOAuthState(state);
-    const expectedNonce = parseCookieHeader2(req.headers.cookie ?? "")[OAUTH_STATE_COOKIE];
-    if (!nonce || nonce !== expectedNonce) {
-      res.status(403).json({ error: "invalid oauth state" });
-      return;
-    }
-    res.clearCookie(OAUTH_STATE_COOKIE, { path: "/", secure: true, sameSite: "none" });
-    try {
-      const tokenResponse = await sdk.exchangeCodeForToken(code, state);
-      const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
-      if (!userInfo.openId) {
-        res.status(400).json({ error: "openId missing from user info" });
-        return;
-      }
-      await upsertUser({
-        openId: userInfo.openId,
-        name: userInfo.name || null,
-        email: userInfo.email ?? null,
-        loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
-        lastSignedIn: /* @__PURE__ */ new Date()
-      });
-      const sessionToken = await sdk.createSessionToken(userInfo.openId, {
-        name: userInfo.name || "",
-        expiresInMs: ONE_YEAR_MS
-      });
-      const cookieOptions = getSessionCookieOptions(req);
-      res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
-      res.redirect(302, "/");
-    } catch (error) {
-      console.error("[OAuth] Callback failed", error);
-      res.status(500).json({ error: "OAuth callback failed" });
-    }
-  });
 }
 
 // server/_core/storageProxy.ts
@@ -1059,7 +1069,7 @@ function createApp() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
-  registerOAuthRoutes(app);
+  registerOwnerPasswordAuthRoutes(app);
   app.use(
     "/api/trpc",
     createExpressMiddleware({

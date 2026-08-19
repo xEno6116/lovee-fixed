@@ -77,4 +77,12 @@
 - [x] สร้างหรือเลือก Vercel team ใหม่ที่บัญชีผู้ใช้เป็น Owner สำหรับ deployment
 - [x] เชื่อม GitHub repository กับ Vercel team ใหม่และสร้าง project ใหม่แทน project เดิมที่สิทธิ์ไม่พอ
 - [x] ตรวจหน้าเข้าสู่ระบบบน URL production ของ Vercel team ใหม่
-- [ ] แก้ Vercel SPA fallback ไม่ให้ดักเส้นทาง /api และทดสอบ tRPC/OAuth บน production
+- [x] แก้ Vercel SPA fallback ไม่ให้ดักเส้นทาง /api และทดสอบ tRPC/OAuth บน production
+- [x] ยกเลิกการใช้ Manus OAuth callback บน production และเลือกใช้ password login ฝั่ง server แทน
+- [x] แทนที่ Manus OAuth ด้วย login รหัสผ่านเจ้าของที่ตรวจฝั่ง server และออก signed session cookie
+- [x] เก็บรหัสผ่านเจ้าของใน secret `OWNER_LOGIN_PASSWORD` โดยไม่ส่งไป browser หรือ GitHub
+- [x] ปรับหน้า login และ logout ให้ใช้ระบบรหัสผ่านใหม่โดยคง UX/UI เดิม
+- [ ] ทดสอบการเข้าสู่ระบบ การออกจากระบบ และการคุมสิทธิ์หลังบ้านบน production
+- [ ] Deploy โค้ด password login ล่าสุดขึ้น Vercel production และทดสอบ protected routes จริง
+- [ ] ยืนยันบน production ว่า `/api/trpc` ทำงานและ `/api/oauth/callback` ไม่ถูกใช้งานแล้ว
+- [ ] ตรวจ UI/interaction ของ auth gate ใน Dashboard, Home, Settings และ DashboardLayout บน production

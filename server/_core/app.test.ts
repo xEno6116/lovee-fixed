@@ -47,14 +47,13 @@ describe("shared Express app factory", () => {
     ]));
   });
 
-  it("keeps the OAuth callback path on the serverless handler instead of serving the SPA", async () => {
+  it("does not expose the removed OAuth callback route", async () => {
     server = createServer(vercelHandler);
     await new Promise<void>((resolve) => server?.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (!address || typeof address === "string") throw new Error("ไม่สามารถเปิด test server ได้");
 
     const response = await fetch(`http://127.0.0.1:${address.port}/api/oauth/callback`);
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({ error: "code and state are required" });
+    expect(response.status).toBe(404);
   });
 });

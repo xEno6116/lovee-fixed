@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { ChevronLeft, ChevronRight, Pause, Play, Settings, Video } from "lucide-react";
-import { startLogin } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { OwnerLoginButton } from "@/components/OwnerLoginModal";
 import { trpc } from "@/lib/trpc";
 
 type TimeParts = { days: number; hours: number; minutes: number; seconds: number };
@@ -61,7 +61,7 @@ export default function Home({ slug }: { slug: string }) {
   };
 
   if (loading) return <div className="legacy-loading">กำลังตรวจสอบสิทธิ์การเข้าถึง…</div>;
-  if (!isAuthenticated) return <div className="legacy-loading"><div className="text-center"><p>เว็บไซต์นี้เป็นส่วนตัวสำหรับเจ้าของเท่านั้น</p><button className="legacy-save-btn mt-5" onClick={() => startLogin()}>เข้าสู่ระบบเจ้าของ</button></div></div>;
+  if (!isAuthenticated) return <div className="legacy-loading"><div className="text-center"><p>เว็บไซต์นี้เป็นส่วนตัวสำหรับเจ้าของเท่านั้น</p><OwnerLoginButton className="legacy-save-btn mt-5">เข้าสู่ระบบเจ้าของ</OwnerLoginButton></div></div>;
   if (siteQuery.isLoading) return <div className="legacy-loading">กำลังเปิดความทรงจำ…</div>;
   if (!site) return <div className="legacy-loading">ไม่สามารถเปิดเว็บไซต์นี้ได้</div>;
 

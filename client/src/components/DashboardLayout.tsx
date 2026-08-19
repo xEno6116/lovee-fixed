@@ -19,13 +19,12 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { startLogin } from "@/const";
+import { OwnerLoginButton } from "@/components/OwnerLoginModal";
 import { useIsMobile } from "@/hooks/useMobile";
 import { Heart, LogOut, PanelLeft } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
-import { Button } from "./ui/button";
 
 const menuItems = [
   { icon: Heart, label: "เว็บไซต์ของฉัน", path: "/" },
@@ -67,13 +66,11 @@ export default function DashboardLayout({
               Access to this dashboard requires authentication. Continue to launch the login flow.
             </p>
           </div>
-          <Button
-            onClick={() => startLogin()}
-            size="lg"
+          <OwnerLoginButton
             className="w-full shadow-lg hover:shadow-xl transition-all"
           >
             Sign in
-          </Button>
+          </OwnerLoginButton>
         </div>
       </div>
     );

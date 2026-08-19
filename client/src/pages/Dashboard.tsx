@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ExternalLink, Loader2, Plus, Settings, Trash2 } from "lucide-react";
-import { startLogin } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 import DashboardLayout from "@/components/DashboardLayout";
+import { OwnerLoginButton } from "@/components/OwnerLoginModal";
 import { trpc } from "@/lib/trpc";
 
 export default function Dashboard() {
@@ -26,7 +26,7 @@ export default function Dashboard() {
   const remove = (siteTitle: string, siteSlug: string) => { if (window.confirm(`ลบเว็บไซต์ “${siteTitle}” และข้อมูลทั้งหมดหรือไม่?`)) removeMutation.mutate({ slug: siteSlug }); };
 
   if (loading) return <div className="legacy-loading"><Loader2 className="animate-spin" /></div>;
-  if (!isAuthenticated) return <div className="legacy-loading"><div className="text-center"><h1 className="text-3xl">หลังบ้านเว็บไซต์ความทรงจำ</h1><p className="mt-3">เข้าสู่ระบบเพื่อสร้างและดูเฉพาะเว็บไซต์ของคุณ</p><button className="legacy-save-btn mt-6" onClick={() => startLogin()}>เข้าสู่ระบบ</button></div></div>;
+  if (!isAuthenticated) return <div className="legacy-loading"><div className="text-center"><h1 className="text-3xl">หลังบ้านเว็บไซต์ความทรงจำ</h1><p className="mt-3">เข้าสู่ระบบเพื่อสร้างและดูเฉพาะเว็บไซต์ของคุณ</p><OwnerLoginButton className="legacy-save-btn mt-6">เข้าสู่ระบบ</OwnerLoginButton></div></div>;
 
   return <DashboardLayout><div className="mx-auto max-w-5xl space-y-8 py-6">
     <header><p className="text-sm font-semibold text-pink-500">PRIVATE SITE MANAGER</p><h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">เว็บไซต์ของฉัน</h1><p className="mt-2 text-slate-500">ทุกเว็บไซต์ ข้อมูล และสื่อ ถูกแยกตามบัญชีของคุณ</p></header>

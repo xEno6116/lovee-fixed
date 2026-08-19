@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { Link } from "wouter";
 import { Loader2, Trash2, Upload } from "lucide-react";
-import { startLogin } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { OwnerLoginButton } from "@/components/OwnerLoginModal";
 import { trpc } from "@/lib/trpc";
 
 function readAsDataUrl(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("ไม่สามารถอ่านไฟล์ได้")); reader.readAsDataURL(file); }); }
@@ -38,7 +38,7 @@ export default function Settings({ slug }: { slug: string }) {
   const remove = (id: number) => removeMutation.mutate({ slug, id });
 
   if (loading || (isAuthenticated && adminQuery.isLoading)) return <div className="legacy-admin-screen"><div className="legacy-admin-box text-center"><Loader2 className="mx-auto animate-spin text-pink-500" /></div></div>;
-  if (!isAuthenticated) return <div className="legacy-admin-screen"><div className="legacy-admin-box text-center"><h3>เว็บไซต์ส่วนตัว</h3><p className="legacy-admin-note">เข้าสู่ระบบเจ้าของเว็บไซต์ก่อนเพื่อจัดการข้อมูล</p><button className="legacy-save-btn mt-5" onClick={() => startLogin()}>Sign in</button></div></div>;
+  if (!isAuthenticated) return <div className="legacy-admin-screen"><div className="legacy-admin-box text-center"><h3>เว็บไซต์ส่วนตัว</h3><p className="legacy-admin-note">เข้าสู่ระบบเจ้าของเว็บไซต์ก่อนเพื่อจัดการข้อมูล</p><OwnerLoginButton className="legacy-save-btn mt-5">Sign in</OwnerLoginButton></div></div>;
   if (adminQuery.error || !adminQuery.data) return <div className="legacy-admin-screen"><div className="legacy-admin-box text-center"><h3>ไม่พบเว็บไซต์นี้</h3><p className="legacy-admin-note">เว็บไซต์นี้เป็นของเจ้าของรายอื่น หรือไม่มีอยู่ในระบบ</p><Link className="legacy-close-btn mt-4 inline-block" href="/">กลับแดชบอร์ด</Link></div></div>;
 
   return <div className="legacy-admin-screen"><section className="legacy-admin-box"><h3>{adminQuery.data.site.title}</h3><div className="legacy-admin-stack">
