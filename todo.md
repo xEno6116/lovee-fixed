@@ -55,7 +55,7 @@
 - [x] ตรวจสอบการเชื่อม GitHub repository และ branch ใน Vercel
 - [x] เตรียมโค้ด full-stack สำหรับ runtime และ environment ของ Vercel
 - [x] ตั้งค่า deployment จาก branch fullstack-backoffice-20260819 บน Vercel
-- [ ] ตรวจหน้าเว็บและระบบหลังบ้านบน URL production
+- [x] ตรวจหน้าเว็บและระบบหลังบ้านบน URL production
 - [x] ออกแบบไฟล์ข้อมูลเว็บไซต์และสื่อสำหรับจัดเก็บใน GitHub repository
 - [x] ย้ายการอ่านและบันทึกข้อมูลจากฐานข้อมูลไปยัง GitHub API ฝั่ง server
 - [x] เก็บ GitHub credential เฉพาะ environment ฝั่ง server และไม่ส่งไปยัง frontend
@@ -82,7 +82,7 @@
 - [x] แทนที่ Manus OAuth ด้วย login รหัสผ่านเจ้าของที่ตรวจฝั่ง server และออก signed session cookie
 - [x] เก็บรหัสผ่านเจ้าของใน secret `OWNER_LOGIN_PASSWORD` โดยไม่ส่งไป browser หรือ GitHub
 - [x] ปรับหน้า login และ logout ให้ใช้ระบบรหัสผ่านใหม่โดยคง UX/UI เดิม
-- [ ] ทดสอบการเข้าสู่ระบบ การออกจากระบบ และการคุมสิทธิ์หลังบ้านบน production
-- [ ] Deploy โค้ด password login ล่าสุดขึ้น Vercel production และทดสอบ protected routes จริง
-- [ ] ยืนยันบน production ว่า `/api/trpc` ทำงานและ `/api/oauth/callback` ไม่ถูกใช้งานแล้ว
-- [ ] ตรวจ UI/interaction ของ auth gate ใน Dashboard, Home, Settings และ DashboardLayout บน production
+- [x] ทดสอบการเข้าสู่ระบบ การออกจากระบบ และการคุมสิทธิ์หลังบ้านบน production
+- [x] Deploy โค้ด password login ล่าสุดขึ้น Vercel production และทดสอบ protected routes จริง
+- [x] ยืนยันบน production ว่า `/api/trpc` ทำงานและ `/api/oauth/callback` ไม่ถูกใช้งานแล้ว
+- [x] ตรวจ UI/interaction ของ auth gate ใน Dashboard, Home, Settings และ DashboardLayout บน production
