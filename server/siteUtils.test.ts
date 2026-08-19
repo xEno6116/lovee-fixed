@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PIN, decodeDataUrl, hashPin, isAllowedMedia, isValidPin, safeFileName } from "./siteUtils";
+import { DEFAULT_PIN, decodeDataUrl, hashPin, isAllowedFont, isAllowedMedia, isValidPin, safeFileName } from "./siteUtils";
 
 describe("site utilities", () => {
   it("accepts only a four-digit PIN and keeps the default PIN stable", () => {
@@ -25,5 +25,11 @@ describe("site utilities", () => {
   it("normalizes filenames used in storage keys", () => {
     expect(safeFileName("ความทรงจำ ของเรา!.png")).toBe(".png");
     expect(safeFileName("hello world.mp4")).toBe("hello-world.mp4");
+  });
+
+  it("accepts supported font files only", () => {
+    expect(isAllowedFont("memory.woff2", "font/woff2")).toBe(true);
+    expect(isAllowedFont("memory.ttf", "application/octet-stream")).toBe(true);
+    expect(isAllowedFont("memory.exe", "application/octet-stream")).toBe(false);
   });
 });
