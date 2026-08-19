@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { ChevronLeft, ChevronRight, Facebook, Instagram, Pause, Play, Video } from "lucide-react";
+import { BookHeart, ChevronLeft, ChevronRight, Facebook, Instagram, MapPin, Pause, Play, QrCode, Share2, Sparkles, Video } from "lucide-react";
+import QRCode from "qrcode";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { OwnerLoginButton } from "@/components/OwnerLoginModal";
 import { trpc } from "@/lib/trpc";
@@ -19,6 +20,7 @@ export default function Home({ slug }: { slug: string }) {
   const { isAuthenticated, loading } = useAuth();
   const siteQuery = trpc.site.private.get.useQuery({ slug }, { enabled: isAuthenticated });
   const verifyPin = trpc.site.private.verifyPin.useMutation();
+  const recordView = trpc.site.private.recordView.useMutation();
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [unlocked, setUnlocked] = useState(false);
@@ -26,6 +28,7 @@ export default function Home({ slug }: { slug: string }) {
   const [videoIndex, setVideoIndex] = useState(0);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [qrCode, setQrCode] = useState("");
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const site = siteQuery.data;
@@ -38,6 +41,9 @@ export default function Home({ slug }: { slug: string }) {
     const timer = window.setInterval(updateClock, 1_000);
     return () => window.clearInterval(timer);
   }, [site?.settings.startDate]);
+
+  useEffect(() => { if (unlocked) void QRCode.toDataURL(window.location.href, { width: 180, margin: 1, color: { dark: "#3b2438", light: "#ffffff" } }).then(setQrCode); }, [unlocked]);
+  useEffect(() => { if (unlocked) recordView.mutate({ slug }); }, [unlocked, slug]);
 
   const pressNumber = (digit: string) => {
     if (verifyPin.isPending || pin.length >= 4) return;
@@ -68,8 +74,15 @@ export default function Home({ slug }: { slug: string }) {
   const movePhoto = (direction: number) => { if (photos.length) setPhotoIndex((index) => (index + direction + photos.length) % photos.length); };
   const themeStyle = { "--legacy-theme": site.settings.themeColor || "#ec4899" } as CSSProperties & { "--legacy-theme": string };
   const hasContacts = Boolean(site.settings.facebookUrl || site.settings.instagramUrl);
+  const features = site.settings.features;
+  const now = Date.now();
+  const isPublished = (date: string) => !date || new Date(date).getTime() <= now;
+  const visibleNotes = features.notes.filter((note) => isPublished(note.publishAt));
+  const showSurprise = Boolean((features.surpriseTitle || features.surpriseMessage) && isPublished(features.surpriseAt));
+  const nightMode = features.themeMode === "night" || (features.themeMode === "auto" && new Date().getHours() >= 19);
+  const share = async () => { const data = { title: site.site.title, text: "เว็บไซต์ความทรงจำของเรา", url: window.location.href }; try { if (navigator.share) await navigator.share(data); else { await navigator.clipboard.writeText(data.url); window.alert("คัดลอกลิงก์แล้ว"); } } catch { /* User cancelled sharing. */ } };
 
-  return <div className="legacy-anniversary min-h-screen" style={themeStyle}>
+  return <div className={`legacy-anniversary min-h-screen legacy-bg-${features.backgroundStyle} legacy-font-${features.fontFamily} ${nightMode ? "legacy-night" : ""}`} style={themeStyle}>
     <audio ref={audioRef} src={site.settings.musicUrl || undefined} loop onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} />
     {!unlocked && <section className="legacy-lock-screen">
       <div className="mb-10 text-center"><h2>{site.site.title}</h2></div>
@@ -78,12 +91,16 @@ export default function Home({ slug }: { slug: string }) {
       <p className="legacy-lock-error">{verifyPin.isPending ? "กำลังตรวจสอบ…" : error}</p>
     </section>}
     {unlocked && <main className="legacy-main-content">
-      <header className="legacy-header"><h1>{site.site.title}</h1><div className="legacy-clock"><ClockBox value={clock.days} label="วัน" /><ClockBox value={clock.hours} label="ชั่วโมง" /><ClockBox value={clock.minutes} label="นาที" /><ClockBox value={clock.seconds} label="วินาที" /></div></header>
-      <section className="legacy-section legacy-video-section"><div className="legacy-section-inner"><h3>วิดีโอ 🎬</h3><p className="legacy-section-hint">เลื่อนด้วยลูกศรเพื่อดูช่องวิดีโอทั้ง 4 ช่อง</p><div className="legacy-video-shell"><button type="button" className="legacy-arrow legacy-arrow-prev" onClick={() => setVideoIndex((index) => (index + 3) % 4)} aria-label="ช่องวิดีโอก่อนหน้า"><ChevronLeft size={22} /></button><div className="legacy-video-viewport"><div className="legacy-video-track" style={{ transform: `translateX(-${videoIndex * 100}%)` }}>{videoSlots.map((asset, index) => <div className="legacy-video-slide" key={asset?.id ?? `slot-${index}`}>{asset ? <video className="size-full object-contain bg-slate-950" controls playsInline src={asset.url} /> : <div className="legacy-empty-media"><Video size={34} /><strong>ช่องวิดีโอ {index + 1}</strong><span>ยังไม่มีไฟล์</span></div>}</div>)}</div></div><button type="button" className="legacy-arrow legacy-arrow-next" onClick={() => setVideoIndex((index) => (index + 1) % 4)} aria-label="ช่องวิดีโอถัดไป"><ChevronRight size={22} /></button></div><p className="legacy-counter">{videoIndex + 1}/4</p></div></section>
-      <section className="legacy-section legacy-message-section"><div className="legacy-glass-card"><p>{site.settings.memoryMessage}</p></div></section>
-      <section className="legacy-section legacy-gallery-section"><h3>รูปที่คบกัน 📸</h3><div className="legacy-photo-slider"><button type="button" className="legacy-arrow legacy-photo-prev" onClick={() => movePhoto(-1)} disabled={!photos.length} aria-label="รูปก่อนหน้า"><ChevronLeft size={22} /></button><div className="legacy-photo-viewport"><div className="legacy-photo-track" style={{ transform: `translateX(-${photoIndex * 100}%)` }}>{photos.length ? photos.map((asset) => <div className="legacy-photo-slide" key={asset.id}><img src={asset.url} alt={asset.originalName} /></div>) : <div className="legacy-photo-slide"><div className="legacy-empty-photo">ยังไม่มีรูปภาพ</div></div>}</div></div><button type="button" className="legacy-arrow legacy-photo-next" onClick={() => movePhoto(1)} disabled={!photos.length} aria-label="รูปถัดไป"><ChevronRight size={22} /></button></div></section>
-      <footer className="legacy-footer"><p>อยู่ด้วยกันตลอดไปนะ 💖🌷</p>{hasContacts && <nav className="legacy-contact-links" aria-label="ช่องทางติดต่อ">{site.settings.facebookUrl && <a href={site.settings.facebookUrl} target="_blank" rel="noreferrer" aria-label="Facebook"><Facebook size={19} /><span>Facebook</span></a>}{site.settings.instagramUrl && <a href={site.settings.instagramUrl} target="_blank" rel="noreferrer" aria-label="Instagram"><Instagram size={19} /><span>Instagram</span></a>}</nav>}</footer>
+      <header className="legacy-header"><h1>{site.site.title}</h1>{features.welcomeTitle && <p className="legacy-welcome-title">{features.welcomeTitle}</p>}{features.welcomeMessage && <p className="legacy-welcome-message">{features.welcomeMessage}</p>}<div className="legacy-clock"><ClockBox value={clock.days} label="วัน" /><ClockBox value={clock.hours} label="ชั่วโมง" /><ClockBox value={clock.minutes} label="นาที" /><ClockBox value={clock.seconds} label="วินาที" /></div></header>
+      {showSurprise && <section className="legacy-section"><div className="legacy-surprise"><Sparkles size={25} /><div><h3>{features.surpriseTitle || "เซอร์ไพรส์สำหรับเธอ"}</h3><p>{features.surpriseMessage}</p></div></div></section>}
+      {!features.hideVideos && <section className="legacy-section legacy-video-section"><div className="legacy-section-inner"><h3>วิดีโอ 🎬</h3><p className="legacy-section-hint">เลื่อนด้วยลูกศรเพื่อดูช่องวิดีโอทั้ง 4 ช่อง</p><div className="legacy-video-shell"><button type="button" className="legacy-arrow legacy-arrow-prev" onClick={() => setVideoIndex((index) => (index + 3) % 4)} aria-label="ช่องวิดีโอก่อนหน้า"><ChevronLeft size={22} /></button><div className="legacy-video-viewport"><div className="legacy-video-track" style={{ transform: `translateX(-${videoIndex * 100}%)` }}>{videoSlots.map((asset, index) => <div className="legacy-video-slide" key={asset?.id ?? `slot-${index}`}>{asset ? <video className="size-full object-contain bg-slate-950" controls playsInline src={asset.url} /> : <div className="legacy-empty-media"><Video size={34} /><strong>ช่องวิดีโอ {index + 1}</strong><span>ยังไม่มีไฟล์</span></div>}</div>)}</div></div><button type="button" className="legacy-arrow legacy-arrow-next" onClick={() => setVideoIndex((index) => (index + 1) % 4)} aria-label="ช่องวิดีโอถัดไป"><ChevronRight size={22} /></button></div><p className="legacy-counter">{videoIndex + 1}/4</p></div></section>}
+      {!features.hideMessage && <section className="legacy-section legacy-message-section"><div className="legacy-glass-card"><p>{site.settings.memoryMessage}</p></div></section>}
+      {features.timeline.length > 0 && <section className="legacy-section"><h3>ไทม์ไลน์ของเรา</h3><div className="legacy-story-list">{features.timeline.map((item) => <article key={item.id}><strong>{item.date}</strong><h4>{item.title}</h4><p>{item.description}</p></article>)}</div></section>}
+      {features.places.length > 0 && <section className="legacy-section"><h3>สถานที่พิเศษ</h3><div className="legacy-place-list">{features.places.map((item) => <a key={item.id} href={item.mapUrl || undefined} target="_blank" rel="noreferrer"><MapPin size={17} />{item.name}</a>)}</div></section>}
+      {visibleNotes.length > 0 && <section className="legacy-section"><h3>สมุดข้อความ <BookHeart size={22} className="inline" /></h3><div className="legacy-story-list">{visibleNotes.map((note) => <article key={note.id}><h4>{note.title}</h4><p>{note.body}</p></article>)}</div></section>}
+      {!features.hideGallery && <section className="legacy-section legacy-gallery-section"><h3>รูปที่คบกัน 📸</h3><div className="legacy-photo-slider"><button type="button" className="legacy-arrow legacy-photo-prev" onClick={() => movePhoto(-1)} disabled={!photos.length} aria-label="รูปก่อนหน้า"><ChevronLeft size={22} /></button><div className="legacy-photo-viewport"><div className="legacy-photo-track" style={{ transform: `translateX(-${photoIndex * 100}%)` }}>{photos.length ? photos.map((asset) => <div className="legacy-photo-slide" key={asset.id}><img src={asset.url} alt={asset.originalName} /></div>) : <div className="legacy-photo-slide"><div className="legacy-empty-photo">ยังไม่มีรูปภาพ</div></div>}</div></div><button type="button" className="legacy-arrow legacy-photo-next" onClick={() => movePhoto(1)} disabled={!photos.length} aria-label="รูปถัดไป"><ChevronRight size={22} /></button></div></section>}
+      <footer className="legacy-footer"><p>อยู่ด้วยกันตลอดไปนะ 💖🌷</p>{hasContacts && <nav className="legacy-contact-links" aria-label="ช่องทางติดต่อ">{site.settings.facebookUrl && <a href={site.settings.facebookUrl} target="_blank" rel="noreferrer" aria-label="Facebook"><Facebook size={19} /><span>Facebook</span></a>}{site.settings.instagramUrl && <a href={site.settings.instagramUrl} target="_blank" rel="noreferrer" aria-label="Instagram"><Instagram size={19} /><span>Instagram</span></a>}</nav>}<div className="legacy-share"><button type="button" onClick={share}><Share2 size={17} />แชร์ลิงก์</button>{qrCode && <details><summary><QrCode size={17} />QR Code</summary><img src={qrCode} alt="QR Code สำหรับเปิดเว็บไซต์นี้" /></details>}</div></footer>
     </main>}
-    {unlocked && <div className={`legacy-cd-player ${playing ? "playing" : ""}`}><div className="legacy-cd-case"><div className="legacy-cd-disc"><div className="legacy-cd-center" /></div></div><div><p className="legacy-cd-label">Our Song ❤️</p><button type="button" className="legacy-cd-button" onClick={toggleMusic} disabled={!site.settings.musicUrl} aria-label="เล่นหรือหยุดเพลง">{playing ? <Pause size={13} /> : <Play size={13} fill="currentColor" />}</button></div></div>}
+    {unlocked && <div className={`legacy-cd-player ${playing ? "playing" : ""}`}><div className="legacy-cd-case"><div className="legacy-cd-disc"><div className="legacy-cd-center" /></div></div><div><p className="legacy-cd-label">{features.songLabel || "Our Song ❤️"}</p><button type="button" className="legacy-cd-button" onClick={toggleMusic} disabled={!site.settings.musicUrl} aria-label="เล่นหรือหยุดเพลง">{playing ? <Pause size={13} /> : <Play size={13} fill="currentColor" />}</button></div></div>}
   </div>;
 }

@@ -9,6 +9,7 @@ import {
   getOwnedSiteBySlug,
   getPrivateSiteData,
   listMediaAssets,
+  recordSiteView,
   listSitesForOwner,
   setMusicUrl,
   updateMediaOrder,
@@ -21,11 +22,22 @@ import { protectedProcedure, router } from "../_core/trpc";
 const slugSchema = z.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
 const siteInput = z.object({ slug: slugSchema });
 const optionalHttpUrl = z.string().url().refine((value) => /^https?:\/\//i.test(value), "ใช้ลิงก์ http หรือ https เท่านั้น").or(z.literal(""));
+const timelineEntryInput = z.object({ id: z.string().min(1).max(80), title: z.string().trim().min(1).max(120), date: z.string().max(32), description: z.string().trim().max(1000) });
+const placeEntryInput = z.object({ id: z.string().min(1).max(80), name: z.string().trim().min(1).max(120), mapUrl: optionalHttpUrl });
+const storyNoteInput = z.object({ id: z.string().min(1).max(80), title: z.string().trim().min(1).max(120), body: z.string().trim().max(3000), publishAt: z.string().max(32) });
+const featureInput = z.object({
+  songLabel: z.string().trim().max(120), welcomeTitle: z.string().trim().max(160), welcomeMessage: z.string().trim().max(1000),
+  fontFamily: z.enum(["gaegu", "serif", "sans"]), backgroundStyle: z.enum(["soft", "sunset", "night", "paper"]), themeMode: z.enum(["light", "night", "auto"]),
+  hideVideos: z.boolean(), hideGallery: z.boolean(), hideMessage: z.boolean(), surpriseTitle: z.string().trim().max(160), surpriseMessage: z.string().trim().max(1500), surpriseAt: z.string().max(32),
+  timeline: z.array(timelineEntryInput).max(30), places: z.array(placeEntryInput).max(20), notes: z.array(storyNoteInput).max(30), ownerNote: z.string().trim().max(3000),
+});
 const settingsInput = z.object({
   slug: slugSchema,
   facebookUrl: optionalHttpUrl,
   instagramUrl: optionalHttpUrl,
   themeColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "เลือกรหัสสีแบบ #RRGGBB"),
+  pin: z.string().regex(/^\d{4}$/).optional(),
+  features: featureInput,
 });
 
 async function requireOwnedSite(ownerId: number, slug: string) {
@@ -71,6 +83,12 @@ export const siteRouter = router({
         if (!isValidPin(input.pin)) return { valid: false };
         const site = await requireOwnedSite(ctx.user.id, input.slug);
         return { valid: await verifySitePin(site.id, input.pin) };
+      }),
+    recordView: protectedProcedure
+      .input(siteInput)
+      .mutation(async ({ ctx, input }) => {
+        const site = await requireOwnedSite(ctx.user.id, input.slug);
+        return recordSiteView(site.id);
       }),
   }),
   admin: router({

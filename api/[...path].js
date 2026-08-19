@@ -222,6 +222,24 @@ async function storagePut(relKey, data, contentType = "application/octet-stream"
 }
 
 // server/db.ts
+var defaultFeatureSettings = () => ({
+  songLabel: "Our Song \u2764\uFE0F",
+  welcomeTitle: "",
+  welcomeMessage: "",
+  fontFamily: "gaegu",
+  backgroundStyle: "soft",
+  themeMode: "light",
+  hideVideos: false,
+  hideGallery: false,
+  hideMessage: false,
+  surpriseTitle: "",
+  surpriseMessage: "",
+  surpriseAt: "",
+  timeline: [],
+  places: [],
+  notes: [],
+  ownerNote: ""
+});
 var SITE_DATA_PATH = "data/sites.json";
 var USER_DATA_PATH = "data/users.json";
 function emptyRepository() {
@@ -244,6 +262,13 @@ function toClientSite({ settings: _settings, assets: _assets, ...site }) {
 }
 function toClientSettings({ pinHash: _pinHash, ...settings }) {
   return settings;
+}
+function normalizeFeatures(settings) {
+  return { ...defaultFeatureSettings(), ...settings.features ?? {} };
+}
+function toPublicFeatures(settings) {
+  const { ownerNote: _ownerNote, ...features } = normalizeFeatures(settings);
+  return features;
 }
 function toClientAsset({ storageKey: _storageKey, ...asset }) {
   return asset;
@@ -318,6 +343,7 @@ async function createSiteForOwner(ownerId, input) {
       slug: input.slug,
       createdAt: now,
       updatedAt: now,
+      viewCount: 0,
       settings: {
         id: repository.nextSettingsId++,
         siteId,
@@ -328,6 +354,8 @@ async function createSiteForOwner(ownerId, input) {
         facebookUrl: "",
         instagramUrl: "",
         themeColor: "#ec4899",
+        features: defaultFeatureSettings(),
+        revisionLog: [],
         createdAt: now,
         updatedAt: now
       },
@@ -368,7 +396,8 @@ async function getPrivateSiteData(ownerId, slug) {
       musicUrl: site.settings.musicUrl,
       facebookUrl: site.settings.facebookUrl ?? "",
       instagramUrl: site.settings.instagramUrl ?? "",
-      themeColor: site.settings.themeColor ?? "#ec4899"
+      themeColor: site.settings.themeColor ?? "#ec4899",
+      features: toPublicFeatures(site.settings)
     },
     images: assets.filter((asset) => asset.kind === "image").map(toClientAsset),
     videos: assets.filter((asset) => asset.kind === "video").map(toClientAsset)
@@ -380,8 +409,20 @@ async function getAdminSiteData(ownerId, slug) {
   return {
     site: toClientSite(site),
     settings: toClientSettings(site.settings),
-    assets: sortAssets(site.assets).map(toClientAsset)
+    assets: sortAssets(site.assets).map(toClientAsset),
+    storageBytes: site.assets.reduce((sum, asset) => sum + (asset.byteLength ?? 0), 0),
+    viewCount: site.viewCount ?? 0,
+    lastViewedAt: site.lastViewedAt ?? ""
   };
+}
+async function recordSiteView(siteId) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: record view ${siteId}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) return { data: repository, result: { success: false, views: 0 } };
+    site.viewCount = (site.viewCount ?? 0) + 1;
+    site.lastViewedAt = (/* @__PURE__ */ new Date()).toISOString();
+    return { data: repository, result: { success: true, views: site.viewCount } };
+  });
 }
 async function verifySitePin(siteId, pin) {
   const settings = await getSiteSettings(siteId);
@@ -397,6 +438,9 @@ async function updateSiteSettings(siteId, input) {
       facebookUrl: input.facebookUrl,
       instagramUrl: input.instagramUrl,
       themeColor: input.themeColor,
+      ...input.features ? { features: input.features } : {},
+      ...input.pin ? { pinHash: hashPin(input.pin) } : {},
+      revisionLog: [{ at: now, label: "\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u0E2A\u0E35\u0E41\u0E25\u0E30\u0E0A\u0E48\u0E2D\u0E07\u0E17\u0E32\u0E07\u0E15\u0E34\u0E14\u0E15\u0E48\u0E2D" }, ...site.settings.revisionLog ?? []].slice(0, 20),
       updatedAt: now
     };
     site.updatedAt = now;
@@ -431,6 +475,7 @@ async function createMediaAsset(siteId, input) {
       originalName: input.originalName,
       mimeType: input.mimeType,
       sortOrder: nextOrder,
+      byteLength: input.bytes.byteLength,
       createdAt: (/* @__PURE__ */ new Date()).toISOString()
     };
     site.assets.push(created);
@@ -916,11 +961,34 @@ import { z as z2 } from "zod";
 var slugSchema = z2.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "\u0E43\u0E0A\u0E49\u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23\u0E2D\u0E31\u0E07\u0E01\u0E24\u0E29 \u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 \u0E41\u0E25\u0E30\u0E02\u0E35\u0E14\u0E01\u0E25\u0E32\u0E07\u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19");
 var siteInput = z2.object({ slug: slugSchema });
 var optionalHttpUrl = z2.string().url().refine((value) => /^https?:\/\//i.test(value), "\u0E43\u0E0A\u0E49\u0E25\u0E34\u0E07\u0E01\u0E4C http \u0E2B\u0E23\u0E37\u0E2D https \u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19").or(z2.literal(""));
+var timelineEntryInput = z2.object({ id: z2.string().min(1).max(80), title: z2.string().trim().min(1).max(120), date: z2.string().max(32), description: z2.string().trim().max(1e3) });
+var placeEntryInput = z2.object({ id: z2.string().min(1).max(80), name: z2.string().trim().min(1).max(120), mapUrl: optionalHttpUrl });
+var storyNoteInput = z2.object({ id: z2.string().min(1).max(80), title: z2.string().trim().min(1).max(120), body: z2.string().trim().max(3e3), publishAt: z2.string().max(32) });
+var featureInput = z2.object({
+  songLabel: z2.string().trim().max(120),
+  welcomeTitle: z2.string().trim().max(160),
+  welcomeMessage: z2.string().trim().max(1e3),
+  fontFamily: z2.enum(["gaegu", "serif", "sans"]),
+  backgroundStyle: z2.enum(["soft", "sunset", "night", "paper"]),
+  themeMode: z2.enum(["light", "night", "auto"]),
+  hideVideos: z2.boolean(),
+  hideGallery: z2.boolean(),
+  hideMessage: z2.boolean(),
+  surpriseTitle: z2.string().trim().max(160),
+  surpriseMessage: z2.string().trim().max(1500),
+  surpriseAt: z2.string().max(32),
+  timeline: z2.array(timelineEntryInput).max(30),
+  places: z2.array(placeEntryInput).max(20),
+  notes: z2.array(storyNoteInput).max(30),
+  ownerNote: z2.string().trim().max(3e3)
+});
 var settingsInput = z2.object({
   slug: slugSchema,
   facebookUrl: optionalHttpUrl,
   instagramUrl: optionalHttpUrl,
-  themeColor: z2.string().regex(/^#[0-9a-fA-F]{6}$/, "\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E2A\u0E35\u0E41\u0E1A\u0E1A #RRGGBB")
+  themeColor: z2.string().regex(/^#[0-9a-fA-F]{6}$/, "\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E2A\u0E35\u0E41\u0E1A\u0E1A #RRGGBB"),
+  pin: z2.string().regex(/^\d{4}$/).optional(),
+  features: featureInput
 });
 async function requireOwnedSite(ownerId, slug) {
   const site = await getOwnedSiteBySlug(ownerId, slug);
@@ -956,6 +1024,10 @@ var siteRouter = router({
       if (!isValidPin(input.pin)) return { valid: false };
       const site = await requireOwnedSite(ctx.user.id, input.slug);
       return { valid: await verifySitePin(site.id, input.pin) };
+    }),
+    recordView: protectedProcedure.input(siteInput).mutation(async ({ ctx, input }) => {
+      const site = await requireOwnedSite(ctx.user.id, input.slug);
+      return recordSiteView(site.id);
     })
   }),
   admin: router({

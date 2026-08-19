@@ -7,6 +7,33 @@ import { storagePut } from "./storage";
 
 type MediaKind = "image" | "video" | "audio";
 
+type TimelineEntry = { id: string; title: string; date: string; description: string };
+type PlaceEntry = { id: string; name: string; mapUrl: string };
+type StoryNote = { id: string; title: string; body: string; publishAt: string };
+export type FeatureSettings = {
+  songLabel: string;
+  welcomeTitle: string;
+  welcomeMessage: string;
+  fontFamily: "gaegu" | "serif" | "sans";
+  backgroundStyle: "soft" | "sunset" | "night" | "paper";
+  themeMode: "light" | "night" | "auto";
+  hideVideos: boolean;
+  hideGallery: boolean;
+  hideMessage: boolean;
+  surpriseTitle: string;
+  surpriseMessage: string;
+  surpriseAt: string;
+  timeline: TimelineEntry[];
+  places: PlaceEntry[];
+  notes: StoryNote[];
+  ownerNote: string;
+};
+
+const defaultFeatureSettings = (): FeatureSettings => ({
+  songLabel: "Our Song ❤️", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", backgroundStyle: "soft", themeMode: "light",
+  hideVideos: false, hideGallery: false, hideMessage: false, surpriseTitle: "", surpriseMessage: "", surpriseAt: "", timeline: [], places: [], notes: [], ownerNote: "",
+});
+
 type StoredSettings = {
   id: number;
   siteId: number;
@@ -17,6 +44,8 @@ type StoredSettings = {
   facebookUrl?: string;
   instagramUrl?: string;
   themeColor?: string;
+  features?: FeatureSettings;
+  revisionLog?: { at: string; label: string }[];
   createdAt: string;
   updatedAt: string;
 };
@@ -30,6 +59,7 @@ type StoredAsset = {
   originalName: string;
   mimeType: string;
   sortOrder: number;
+  byteLength?: number;
   createdAt: string;
 };
 
@@ -40,6 +70,8 @@ type StoredSite = {
   title: string;
   createdAt: string;
   updatedAt: string;
+  viewCount?: number;
+  lastViewedAt?: string;
   settings: StoredSettings;
   assets: StoredAsset[];
 };
@@ -103,6 +135,15 @@ function toClientSite({ settings: _settings, assets: _assets, ...site }: StoredS
 
 function toClientSettings({ pinHash: _pinHash, ...settings }: StoredSettings): ClientSettings {
   return settings;
+}
+
+function normalizeFeatures(settings: StoredSettings): FeatureSettings {
+  return { ...defaultFeatureSettings(), ...(settings.features ?? {}) };
+}
+
+function toPublicFeatures(settings: StoredSettings) {
+  const { ownerNote: _ownerNote, ...features } = normalizeFeatures(settings);
+  return features;
 }
 
 function toClientAsset({ storageKey: _storageKey, ...asset }: StoredAsset): ClientAsset {
@@ -191,6 +232,7 @@ export async function createSiteForOwner(ownerId: number, input: { title: string
       slug: input.slug,
       createdAt: now,
       updatedAt: now,
+      viewCount: 0,
       settings: {
         id: repository.nextSettingsId++,
         siteId,
@@ -201,6 +243,8 @@ export async function createSiteForOwner(ownerId: number, input: { title: string
         facebookUrl: "",
         instagramUrl: "",
         themeColor: "#ec4899",
+        features: defaultFeatureSettings(),
+        revisionLog: [],
         createdAt: now,
         updatedAt: now,
       },
@@ -246,6 +290,7 @@ export async function getPrivateSiteData(ownerId: number, slug: string) {
       facebookUrl: site.settings.facebookUrl ?? "",
       instagramUrl: site.settings.instagramUrl ?? "",
       themeColor: site.settings.themeColor ?? "#ec4899",
+      features: toPublicFeatures(site.settings),
     },
     images: assets.filter((asset) => asset.kind === "image").map(toClientAsset),
     videos: assets.filter((asset) => asset.kind === "video").map(toClientAsset),
@@ -259,7 +304,20 @@ export async function getAdminSiteData(ownerId: number, slug: string) {
     site: toClientSite(site),
     settings: toClientSettings(site.settings),
     assets: sortAssets(site.assets).map(toClientAsset),
+    storageBytes: site.assets.reduce((sum, asset) => sum + (asset.byteLength ?? 0), 0),
+    viewCount: site.viewCount ?? 0,
+    lastViewedAt: site.lastViewedAt ?? "",
   };
+}
+
+export async function recordSiteView(siteId: number) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: record view ${siteId}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) return { data: repository, result: { success: false, views: 0 } };
+    site.viewCount = (site.viewCount ?? 0) + 1;
+    site.lastViewedAt = new Date().toISOString();
+    return { data: repository, result: { success: true, views: site.viewCount } };
+  });
 }
 
 export async function verifySitePin(siteId: number, pin: string) {
@@ -267,7 +325,7 @@ export async function verifySitePin(siteId: number, pin: string) {
   return Boolean(settings && settings.pinHash === hashPin(pin));
 }
 
-export async function updateSiteSettings(siteId: number, input: { facebookUrl: string; instagramUrl: string; themeColor: string }) {
+export async function updateSiteSettings(siteId: number, input: { facebookUrl: string; instagramUrl: string; themeColor: string; pin?: string; features?: FeatureSettings }) {
   return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update settings ${siteId}`, (repository) => {
     const site = getSite(repository, siteId);
     if (!site) throw new Error("ไม่พบเว็บไซต์สำหรับบันทึกการตั้งค่า");
@@ -277,6 +335,9 @@ export async function updateSiteSettings(siteId: number, input: { facebookUrl: s
       facebookUrl: input.facebookUrl,
       instagramUrl: input.instagramUrl,
       themeColor: input.themeColor,
+      ...(input.features ? { features: input.features } : {}),
+      ...(input.pin ? { pinHash: hashPin(input.pin) } : {}),
+      revisionLog: [{ at: now, label: "อัปเดตสีและช่องทางติดต่อ" }, ...(site.settings.revisionLog ?? [])].slice(0, 20),
       updatedAt: now,
     };
     site.updatedAt = now;
@@ -314,6 +375,7 @@ export async function createMediaAsset(siteId: number, input: { kind: MediaKind;
       originalName: input.originalName,
       mimeType: input.mimeType,
       sortOrder: nextOrder,
+      byteLength: input.bytes.byteLength,
       createdAt: new Date().toISOString(),
     };
     site.assets.push(created);
