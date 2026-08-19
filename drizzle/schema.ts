@@ -12,20 +12,29 @@ export const users = mysqlTable("users", {
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
+export const anniversarySites = mysqlTable("anniversary_sites", {
+  id: int("id").autoincrement().primaryKey(),
+  ownerId: int("ownerId").notNull(),
+  slug: varchar("slug", { length: 120 }).notNull().unique(),
+  title: varchar("title", { length: 160 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export const siteSettings = mysqlTable("site_settings", {
   id: int("id").autoincrement().primaryKey(),
+  siteId: int("siteId").notNull().unique(),
   pinHash: varchar("pinHash", { length: 64 }).notNull(),
   startDate: varchar("startDate", { length: 10 }).notNull(),
   memoryMessage: text("memoryMessage").notNull(),
   musicUrl: text("musicUrl").notNull(),
-  birthdayGreeting: varchar("birthdayGreeting", { length: 240 }).notNull(),
-  birthdayWishes: text("birthdayWishes").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export const mediaAssets = mysqlTable("media_assets", {
   id: int("id").autoincrement().primaryKey(),
+  siteId: int("siteId").notNull(),
   kind: mysqlEnum("kind", ["image", "video", "audio"]).notNull(),
   storageKey: varchar("storageKey", { length: 512 }).notNull(),
   url: text("url").notNull(),
@@ -37,5 +46,6 @@ export const mediaAssets = mysqlTable("media_assets", {
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+export type AnniversarySite = typeof anniversarySites.$inferSelect;
 export type SiteSettings = typeof siteSettings.$inferSelect;
 export type MediaAsset = typeof mediaAssets.$inferSelect;

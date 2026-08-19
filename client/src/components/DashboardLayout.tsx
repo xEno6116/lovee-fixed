@@ -21,15 +21,14 @@ import {
 } from "@/components/ui/sidebar";
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { Heart, LayoutDashboard, LogOut, PanelLeft, Settings } from "lucide-react";
+import { Heart, LogOut, PanelLeft } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
 const menuItems = [
-  { icon: Heart, label: "หน้าเว็บไซต์", path: "/" },
-  { icon: Settings, label: "ตั้งค่า", path: "/settings" },
+  { icon: Heart, label: "เว็บไซต์ของฉัน", path: "/" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
