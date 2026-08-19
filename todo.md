@@ -52,9 +52,9 @@
 - [x] ตรวจสอบไฟล์ที่จะส่งขึ้น GitHub ว่าไม่มี token, credential, session หรือข้อมูลลับ
 - [x] ส่งโค้ดขึ้น branch แยกโดยไม่เขียนทับประวัติเดิมของ repository
 - [x] ใช้วิธียืนยัน GitHub ทางเลือกที่ไม่ต้องให้ผู้ใช้กรอกรหัส device flow
-- [ ] ตรวจสอบการเชื่อม GitHub repository และ branch ใน Vercel
-- [ ] เตรียมโค้ด full-stack สำหรับ runtime และ environment ของ Vercel
-- [ ] ตั้งค่า deployment จาก branch fullstack-backoffice-20260819 บน Vercel
+- [x] ตรวจสอบการเชื่อม GitHub repository และ branch ใน Vercel
+- [x] เตรียมโค้ด full-stack สำหรับ runtime และ environment ของ Vercel
+- [x] ตั้งค่า deployment จาก branch fullstack-backoffice-20260819 บน Vercel
 - [ ] ตรวจหน้าเว็บและระบบหลังบ้านบน URL production
 - [x] ออกแบบไฟล์ข้อมูลเว็บไซต์และสื่อสำหรับจัดเก็บใน GitHub repository
 - [x] ย้ายการอ่านและบันทึกข้อมูลจากฐานข้อมูลไปยัง GitHub API ฝั่ง server
@@ -70,7 +70,11 @@
 - [x] ทดสอบ protected route ด้วย owner identity ที่อ่านจาก private GitHub repository
 - [x] ทดสอบ signed session ผ่าน SDK.authenticateRequest ด้วย GitHub-backed owner identity
 - [x] สร้าง Express app factory สำหรับใช้ทั้ง local runtime และ Vercel serverless function
-- [ ] เพิ่ม Vercel routing สำหรับ tRPC, OAuth, storage proxy และ SPA routes
-- [ ] ตรวจ production build และทดสอบ serverless entry point โดยไม่ใช้ MySQL
-- [ ] ทดสอบ api serverless entry โดยตรงและตรวจ SPA fallback routes บน Vercel config
+- [x] เพิ่ม Vercel routing สำหรับ tRPC, OAuth, storage proxy และ SPA routes
+- [x] ตรวจ production build และทดสอบ serverless entry point โดยไม่ใช้ MySQL
+- [x] ทดสอบ api serverless entry โดยตรงและตรวจ SPA fallback routes บน Vercel config
 - [x] จัดทำรายการ environment variables สำหรับ Vercel และตรวจ build/test เมื่อไม่มี DATABASE_URL
+- [x] สร้างหรือเลือก Vercel team ใหม่ที่บัญชีผู้ใช้เป็น Owner สำหรับ deployment
+- [x] เชื่อม GitHub repository กับ Vercel team ใหม่และสร้าง project ใหม่แทน project เดิมที่สิทธิ์ไม่พอ
+- [x] ตรวจหน้าเข้าสู่ระบบบน URL production ของ Vercel team ใหม่
+- [ ] แก้ Vercel SPA fallback ไม่ให้ดักเส้นทาง /api และทดสอบ tRPC/OAuth บน production

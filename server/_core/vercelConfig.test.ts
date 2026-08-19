@@ -9,14 +9,14 @@ describe("Vercel deployment configuration", () => {
   it("keeps API and media paths out of the SPA fallback while supporting direct client routes", async () => {
     const config = JSON.parse(await readFile(path.join(projectRoot, "vercel.json"), "utf8")) as {
       outputDirectory?: string;
-      rewrites?: Array<{ source: string; destination: string }>;
+      routes?: Array<{ handle?: string; src?: string; dest?: string }>;
     };
 
     expect(config.outputDirectory).toBe("dist/public");
-    expect(config.rewrites).toEqual(expect.arrayContaining([
-      { source: "/manus-storage/:path*", destination: "/api/manus-storage/:path*" },
-      { source: "/site/:slug/settings", destination: "/index.html" },
-      { source: "/(.*)", destination: "/index.html" },
-    ]));
+    expect(config.routes).toEqual([
+      { handle: "filesystem" },
+      { src: "/manus-storage/(.*)", dest: "/api/manus-storage/$1" },
+      { src: "/(.*)", dest: "/index.html" },
+    ]);
   });
 });
