@@ -1,0 +1,7 @@
+# Verification Notes
+
+The public backend endpoint returned the default data successfully, including start date, memory text, birthday content, and empty media collections. The public PIN screen accepted `0000` and unlocked the website. The unlocked page displayed the anniversary timer, the four empty video slots, the empty image gallery state, the birthday interaction, the CD player empty state, and the settings entry point. The video next-arrow moved the empty state from slot `1 / 4` to slot `2 / 4` correctly, and the birthday cake changed to its blown-candle confirmation state when clicked. The `/settings` page required authentication before rendering the owner dashboard. The public page handled its initial loading state and then displayed the PIN screen correctly in desktop and mobile checks. These checks were performed against the development server after the production build on 2026-08-19.
+
+After the frontend restoration, the lock screen again used the original simple pale-pink layout, four PIN dots, circular keypad, and top-left settings gear. PIN `0000` unlocked the restored legacy-style main page, where the countdown, four-slot video carousel, memory message, gallery placeholder, birthday card, and CD player are populated from Backend API data.
+
+The live development preview was reopened after the restoration and showed the original-style PIN screen once the backend request had completed.

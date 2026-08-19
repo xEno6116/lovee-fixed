@@ -1,0 +1,1 @@
+ALTER TABLE `media_assets` MODIFY COLUMN `kind` enum('image','video','audio') NOT NULL;
