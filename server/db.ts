@@ -15,6 +15,8 @@ export type FeatureSettings = {
   welcomeTitle: string;
   welcomeMessage: string;
   fontFamily: "gaegu" | "serif" | "sans";
+  customFontUrl: string;
+  customFontName: string;
   backgroundStyle: "soft" | "sunset" | "night" | "paper";
   themeMode: "light" | "night" | "auto";
   hideVideos: boolean;
@@ -30,7 +32,7 @@ export type FeatureSettings = {
 };
 
 const defaultFeatureSettings = (): FeatureSettings => ({
-  songLabel: "Our Song ❤️", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", backgroundStyle: "soft", themeMode: "light",
+  songLabel: "Our Song ❤️", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", customFontUrl: "", customFontName: "", backgroundStyle: "soft", themeMode: "light",
   hideVideos: false, hideGallery: false, hideMessage: false, surpriseTitle: "", surpriseMessage: "", surpriseAt: "", timeline: [], places: [], notes: [], ownerNote: "",
 });
 
@@ -342,6 +344,21 @@ export async function updateSiteSettings(siteId: number, input: { facebookUrl: s
     };
     site.updatedAt = now;
     return { data: repository, result: toClientSettings(site.settings) };
+  });
+}
+
+export async function uploadCustomFont(siteId: number, input: { originalName: string; mimeType: string; bytes: Buffer }) {
+  const storageKey = `anniversary/${siteId}/fonts/${Date.now()}-${safeFileName(input.originalName)}`;
+  const uploaded = await storagePut(storageKey, input.bytes, input.mimeType);
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update font ${siteId}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) throw new Error("ไม่พบเว็บไซต์สำหรับบันทึกฟอนต์");
+    const now = new Date().toISOString();
+    site.settings.features = { ...normalizeFeatures(site.settings), customFontUrl: uploaded.url, customFontName: input.originalName };
+    site.settings.revisionLog = [{ at: now, label: "อัปโหลดฟอนต์ส่วนตัว" }, ...(site.settings.revisionLog ?? [])].slice(0, 20);
+    site.settings.updatedAt = now;
+    site.updatedAt = now;
+    return { data: repository, result: { url: uploaded.url, name: input.originalName } };
   });
 }
 

@@ -29,7 +29,9 @@ export default function Home({ slug }: { slug: string }) {
   const [photoIndex, setPhotoIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [qrCode, setQrCode] = useState("");
+  const [playerPosition, setPlayerPosition] = useState({ x: 0, y: 0 });
   const audioRef = useRef<HTMLAudioElement>(null);
+  const playerDragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
 
   const site = siteQuery.data;
   const videoSlots = useMemo(() => Array.from({ length: 4 }, (_, index) => site?.videos[index] ?? null), [site?.videos]);
@@ -64,6 +66,9 @@ export default function Home({ slug }: { slug: string }) {
     if (!audio || !site?.settings.musicUrl) return;
     try { if (audio.paused) { await audio.play(); setPlaying(true); } else { audio.pause(); setPlaying(false); } } catch { setPlaying(false); }
   };
+  const startPlayerDrag = (event: React.PointerEvent<HTMLDivElement>) => { playerDragRef.current = { startX: event.clientX, startY: event.clientY, baseX: playerPosition.x, baseY: playerPosition.y }; event.currentTarget.setPointerCapture(event.pointerId); };
+  const movePlayer = (event: React.PointerEvent<HTMLDivElement>) => { const drag = playerDragRef.current; if (!drag) return; setPlayerPosition({ x: drag.baseX + event.clientX - drag.startX, y: drag.baseY + event.clientY - drag.startY }); };
+  const endPlayerDrag = () => { playerDragRef.current = null; };
 
   if (loading) return <div className="legacy-loading">กำลังตรวจสอบสิทธิ์การเข้าถึง…</div>;
   if (!isAuthenticated) return <div className="legacy-loading"><div className="text-center"><p>เว็บไซต์นี้เป็นส่วนตัวสำหรับเจ้าของเท่านั้น</p><OwnerLoginButton className="legacy-save-btn mt-5">เข้าสู่ระบบเจ้าของ</OwnerLoginButton></div></div>;
@@ -80,9 +85,11 @@ export default function Home({ slug }: { slug: string }) {
   const visibleNotes = features.notes.filter((note) => isPublished(note.publishAt));
   const showSurprise = Boolean((features.surpriseTitle || features.surpriseMessage) && isPublished(features.surpriseAt));
   const nightMode = features.themeMode === "night" || (features.themeMode === "auto" && new Date().getHours() >= 19);
+  const playerStyle = { "--legacy-player-x": `${playerPosition.x}px`, "--legacy-player-y": `${playerPosition.y}px` } as CSSProperties & { "--legacy-player-x": string; "--legacy-player-y": string };
   const share = async () => { const data = { title: site.site.title, text: "เว็บไซต์ความทรงจำของเรา", url: window.location.href }; try { if (navigator.share) await navigator.share(data); else { await navigator.clipboard.writeText(data.url); window.alert("คัดลอกลิงก์แล้ว"); } } catch { /* User cancelled sharing. */ } };
 
-  return <div className={`legacy-anniversary min-h-screen legacy-bg-${features.backgroundStyle} legacy-font-${features.fontFamily} ${nightMode ? "legacy-night" : ""}`} style={themeStyle}>
+  return <div className={`legacy-anniversary min-h-screen legacy-bg-${features.backgroundStyle} ${features.customFontUrl ? "legacy-font-custom" : `legacy-font-${features.fontFamily}`} ${nightMode ? "legacy-night" : ""}`} style={themeStyle}>
+    {features.customFontUrl && <style>{`@font-face { font-family: 'AnniversaryCustom'; src: url('${features.customFontUrl}') format('woff2'); font-display: swap; }`}</style>}
     <audio ref={audioRef} src={site.settings.musicUrl || undefined} loop onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} />
     {!unlocked && <section className="legacy-lock-screen">
       <div className="mb-10 text-center"><h2>{site.site.title}</h2></div>
@@ -101,6 +108,6 @@ export default function Home({ slug }: { slug: string }) {
       {!features.hideGallery && <section className="legacy-section legacy-gallery-section"><h3>รูปที่คบกัน 📸</h3><div className="legacy-photo-slider"><button type="button" className="legacy-arrow legacy-photo-prev" onClick={() => movePhoto(-1)} disabled={!photos.length} aria-label="รูปก่อนหน้า"><ChevronLeft size={22} /></button><div className="legacy-photo-viewport"><div className="legacy-photo-track" style={{ transform: `translateX(-${photoIndex * 100}%)` }}>{photos.length ? photos.map((asset) => <div className="legacy-photo-slide" key={asset.id}><img src={asset.url} alt={asset.originalName} /></div>) : <div className="legacy-photo-slide"><div className="legacy-empty-photo">ยังไม่มีรูปภาพ</div></div>}</div></div><button type="button" className="legacy-arrow legacy-photo-next" onClick={() => movePhoto(1)} disabled={!photos.length} aria-label="รูปถัดไป"><ChevronRight size={22} /></button></div></section>}
       <footer className="legacy-footer"><p>อยู่ด้วยกันตลอดไปนะ 💖🌷</p>{hasContacts && <nav className="legacy-contact-links" aria-label="ช่องทางติดต่อ">{site.settings.facebookUrl && <a href={site.settings.facebookUrl} target="_blank" rel="noreferrer" aria-label="Facebook"><Facebook size={19} /><span>Facebook</span></a>}{site.settings.instagramUrl && <a href={site.settings.instagramUrl} target="_blank" rel="noreferrer" aria-label="Instagram"><Instagram size={19} /><span>Instagram</span></a>}</nav>}<div className="legacy-share"><button type="button" onClick={share}><Share2 size={17} />แชร์ลิงก์</button>{qrCode && <details><summary><QrCode size={17} />QR Code</summary><img src={qrCode} alt="QR Code สำหรับเปิดเว็บไซต์นี้" /></details>}</div></footer>
     </main>}
-    {unlocked && <div className={`legacy-cd-player ${playing ? "playing" : ""}`}><div className="legacy-cd-case"><div className="legacy-cd-disc"><div className="legacy-cd-center" /></div></div><div><p className="legacy-cd-label">{features.songLabel || "Our Song ❤️"}</p><button type="button" className="legacy-cd-button" onClick={toggleMusic} disabled={!site.settings.musicUrl} aria-label="เล่นหรือหยุดเพลง">{playing ? <Pause size={13} /> : <Play size={13} fill="currentColor" />}</button></div></div>}
+    {unlocked && <div className={`legacy-cd-player ${playing ? "playing" : ""}`} style={playerStyle} onPointerMove={movePlayer} onPointerUp={endPlayerDrag} onPointerCancel={endPlayerDrag}><div className="legacy-cd-case legacy-cd-grab" onPointerDown={startPlayerDrag} title="ลากเพื่อย้ายตำแหน่ง"><div className="legacy-cd-disc"><div className="legacy-cd-center" /></div></div><div><p className="legacy-cd-label">{features.songLabel || "Our Song ❤️"}</p><button type="button" className="legacy-cd-button" onClick={toggleMusic} disabled={!site.settings.musicUrl} aria-label="เล่นหรือหยุดเพลง">{playing ? <Pause size={13} /> : <Play size={13} fill="currentColor" />}</button></div></div>}
   </div>;
 }

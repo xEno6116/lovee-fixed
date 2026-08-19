@@ -174,6 +174,10 @@ function isAllowedMedia(kind, mimeType) {
   if (kind === "video") return mimeType.startsWith("video/");
   return mimeType.startsWith("audio/");
 }
+function isAllowedFont(fileName, mimeType) {
+  const extension = fileName.toLowerCase().match(/\.(woff2?|ttf|otf)$/)?.[1];
+  return Boolean(extension) && (mimeType.startsWith("font/") || mimeType === "application/font-sfnt" || mimeType === "application/vnd.ms-fontobject" || mimeType === "application/octet-stream");
+}
 
 // server/storage.ts
 function getForgeConfig() {
@@ -227,6 +231,8 @@ var defaultFeatureSettings = () => ({
   welcomeTitle: "",
   welcomeMessage: "",
   fontFamily: "gaegu",
+  customFontUrl: "",
+  customFontName: "",
   backgroundStyle: "soft",
   themeMode: "light",
   hideVideos: false,
@@ -445,6 +451,20 @@ async function updateSiteSettings(siteId, input) {
     };
     site.updatedAt = now;
     return { data: repository, result: toClientSettings(site.settings) };
+  });
+}
+async function uploadCustomFont(siteId, input) {
+  const storageKey = `anniversary/${siteId}/fonts/${Date.now()}-${safeFileName(input.originalName)}`;
+  const uploaded = await storagePut(storageKey, input.bytes, input.mimeType);
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update font ${siteId}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) throw new Error("\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E1F\u0E2D\u0E19\u0E15\u0E4C");
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    site.settings.features = { ...normalizeFeatures(site.settings), customFontUrl: uploaded.url, customFontName: input.originalName };
+    site.settings.revisionLog = [{ at: now, label: "\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14\u0E1F\u0E2D\u0E19\u0E15\u0E4C\u0E2A\u0E48\u0E27\u0E19\u0E15\u0E31\u0E27" }, ...site.settings.revisionLog ?? []].slice(0, 20);
+    site.settings.updatedAt = now;
+    site.updatedAt = now;
+    return { data: repository, result: { url: uploaded.url, name: input.originalName } };
   });
 }
 async function setMusicUrl(siteId, musicUrl) {
@@ -969,6 +989,8 @@ var featureInput = z2.object({
   welcomeTitle: z2.string().trim().max(160),
   welcomeMessage: z2.string().trim().max(1e3),
   fontFamily: z2.enum(["gaegu", "serif", "sans"]),
+  customFontUrl: z2.string().max(2048),
+  customFontName: z2.string().max(255),
   backgroundStyle: z2.enum(["soft", "sunset", "night", "paper"]),
   themeMode: z2.enum(["light", "night", "auto"]),
   hideVideos: z2.boolean(),
@@ -1051,6 +1073,13 @@ var siteRouter = router({
       const created = await createMediaAsset(site.id, { kind: input.kind, originalName: input.fileName, mimeType, bytes });
       if (input.kind === "audio") await setMusicUrl(site.id, created.url);
       return created;
+    }),
+    uploadFont: protectedProcedure.input(z2.object({ slug: slugSchema, fileName: z2.string().trim().min(1).max(255), dataUrl: z2.string().min(20).max(15e6) })).mutation(async ({ ctx, input }) => {
+      const site = await requireOwnedSite(ctx.user.id, input.slug);
+      const { mimeType, bytes } = decodeDataUrl(input.dataUrl);
+      if (!isAllowedFont(input.fileName, mimeType)) throw new TRPCError3({ code: "BAD_REQUEST", message: "\u0E23\u0E2D\u0E07\u0E23\u0E31\u0E1A\u0E40\u0E09\u0E1E\u0E32\u0E30\u0E44\u0E1F\u0E25\u0E4C WOFF, WOFF2, TTF \u0E2B\u0E23\u0E37\u0E2D OTF" });
+      if (bytes.byteLength > 8 * 1024 * 1024) throw new TRPCError3({ code: "PAYLOAD_TOO_LARGE", message: "\u0E1F\u0E2D\u0E19\u0E15\u0E4C\u0E21\u0E35\u0E02\u0E19\u0E32\u0E14\u0E40\u0E01\u0E34\u0E19 8MB" });
+      return uploadCustomFont(site.id, { originalName: input.fileName, mimeType, bytes });
     }),
     removeMedia: protectedProcedure.input(z2.object({ slug: slugSchema, id: z2.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const site = await requireOwnedSite(ctx.user.id, input.slug);

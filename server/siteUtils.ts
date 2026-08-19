@@ -31,3 +31,8 @@ export function isAllowedMedia(kind: "image" | "video" | "audio", mimeType: stri
   if (kind === "video") return mimeType.startsWith("video/");
   return mimeType.startsWith("audio/");
 }
+
+export function isAllowedFont(fileName: string, mimeType: string) {
+  const extension = fileName.toLowerCase().match(/\.(woff2?|ttf|otf)$/)?.[1];
+  return Boolean(extension) && (mimeType.startsWith("font/") || mimeType === "application/font-sfnt" || mimeType === "application/vnd.ms-fontobject" || mimeType === "application/octet-stream");
+}

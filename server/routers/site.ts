@@ -10,13 +10,14 @@ import {
   getPrivateSiteData,
   listMediaAssets,
   recordSiteView,
+  uploadCustomFont,
   listSitesForOwner,
   setMusicUrl,
   updateMediaOrder,
   updateSiteSettings,
   verifySitePin,
 } from "../db";
-import { decodeDataUrl, isAllowedMedia, isValidPin } from "../siteUtils";
+import { decodeDataUrl, isAllowedFont, isAllowedMedia, isValidPin } from "../siteUtils";
 import { protectedProcedure, router } from "../_core/trpc";
 
 const slugSchema = z.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
@@ -27,7 +28,7 @@ const placeEntryInput = z.object({ id: z.string().min(1).max(80), name: z.string
 const storyNoteInput = z.object({ id: z.string().min(1).max(80), title: z.string().trim().min(1).max(120), body: z.string().trim().max(3000), publishAt: z.string().max(32) });
 const featureInput = z.object({
   songLabel: z.string().trim().max(120), welcomeTitle: z.string().trim().max(160), welcomeMessage: z.string().trim().max(1000),
-  fontFamily: z.enum(["gaegu", "serif", "sans"]), backgroundStyle: z.enum(["soft", "sunset", "night", "paper"]), themeMode: z.enum(["light", "night", "auto"]),
+  fontFamily: z.enum(["gaegu", "serif", "sans"]), customFontUrl: z.string().max(2048), customFontName: z.string().max(255), backgroundStyle: z.enum(["soft", "sunset", "night", "paper"]), themeMode: z.enum(["light", "night", "auto"]),
   hideVideos: z.boolean(), hideGallery: z.boolean(), hideMessage: z.boolean(), surpriseTitle: z.string().trim().max(160), surpriseMessage: z.string().trim().max(1500), surpriseAt: z.string().max(32),
   timeline: z.array(timelineEntryInput).max(30), places: z.array(placeEntryInput).max(20), notes: z.array(storyNoteInput).max(30), ownerNote: z.string().trim().max(3000),
 });
@@ -118,6 +119,15 @@ export const siteRouter = router({
         const created = await createMediaAsset(site.id, { kind: input.kind, originalName: input.fileName, mimeType, bytes });
         if (input.kind === "audio") await setMusicUrl(site.id, created.url);
         return created;
+      }),
+    uploadFont: protectedProcedure
+      .input(z.object({ slug: slugSchema, fileName: z.string().trim().min(1).max(255), dataUrl: z.string().min(20).max(15_000_000) }))
+      .mutation(async ({ ctx, input }) => {
+        const site = await requireOwnedSite(ctx.user.id, input.slug);
+        const { mimeType, bytes } = decodeDataUrl(input.dataUrl);
+        if (!isAllowedFont(input.fileName, mimeType)) throw new TRPCError({ code: "BAD_REQUEST", message: "รองรับเฉพาะไฟล์ WOFF, WOFF2, TTF หรือ OTF" });
+        if (bytes.byteLength > 8 * 1024 * 1024) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "ฟอนต์มีขนาดเกิน 8MB" });
+        return uploadCustomFont(site.id, { originalName: input.fileName, mimeType, bytes });
       }),
     removeMedia: protectedProcedure
       .input(z.object({ slug: slugSchema, id: z.number().int().positive() }))
