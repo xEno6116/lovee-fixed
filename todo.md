@@ -52,3 +52,14 @@
 - [x] ตรวจสอบไฟล์ที่จะส่งขึ้น GitHub ว่าไม่มี token, credential, session หรือข้อมูลลับ
 - [x] ส่งโค้ดขึ้น branch แยกโดยไม่เขียนทับประวัติเดิมของ repository
 - [x] ใช้วิธียืนยัน GitHub ทางเลือกที่ไม่ต้องให้ผู้ใช้กรอกรหัส device flow
+- [ ] ตรวจสอบการเชื่อม GitHub repository และ branch ใน Vercel
+- [ ] เตรียมโค้ด full-stack สำหรับ runtime และ environment ของ Vercel
+- [ ] ตั้งค่า deployment จาก branch fullstack-backoffice-20260819 บน Vercel
+- [ ] ตรวจหน้าเว็บและระบบหลังบ้านบน URL production
+- [x] ออกแบบไฟล์ข้อมูลเว็บไซต์และสื่อสำหรับจัดเก็บใน GitHub repository
+- [x] ย้ายการอ่านและบันทึกข้อมูลจากฐานข้อมูลไปยัง GitHub API ฝั่ง server
+- [x] เก็บ GitHub credential เฉพาะ environment ฝั่ง server และไม่ส่งไปยัง frontend
+- [x] สร้าง private repository แยกสำหรับข้อมูลเว็บไซต์และกำหนดให้ token เข้าถึงเฉพาะ repository นี้
+- [x] ตรวจสอบการอ่านข้อมูลเว็บไซต์ที่ย้ายแล้วจาก private GitHub repository ผ่าน application data helpers
+- [x] ป้องกันไม่ให้ PIN hash, storage key และข้อมูล repository-only ถูกส่งจาก backend ไป browser
+- [x] ทดสอบการเขียน แก้ไข และลบข้อมูลผ่าน application helpers บน private GitHub repository จริง

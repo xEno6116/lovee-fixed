@@ -1,12 +1,91 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { nanoid } from "nanoid";
-import { anniversarySites, mediaAssets, siteSettings, type InsertUser, users } from "../drizzle/schema";
+import { type InsertUser, type User, users } from "../drizzle/schema";
+import { ENV } from "./_core/env";
+import { updateJson, readJson } from "./githubStorage";
 import { DEFAULT_PIN, hashPin, safeFileName } from "./siteUtils";
 import { storagePut } from "./storage";
-import { ENV } from "./_core/env";
 
 type MediaKind = "image" | "video" | "audio";
+
+type StoredSettings = {
+  id: number;
+  siteId: number;
+  pinHash: string;
+  startDate: string;
+  memoryMessage: string;
+  musicUrl: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type StoredAsset = {
+  id: number;
+  siteId: number;
+  kind: MediaKind;
+  storageKey: string;
+  url: string;
+  originalName: string;
+  mimeType: string;
+  sortOrder: number;
+  createdAt: string;
+};
+
+type StoredSite = {
+  id: number;
+  ownerId: number;
+  slug: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  settings: StoredSettings;
+  assets: StoredAsset[];
+};
+
+type SiteRepository = {
+  version: 1;
+  nextSiteId: number;
+  nextSettingsId: number;
+  nextAssetId: number;
+  sites: StoredSite[];
+};
+
+const SITE_DATA_PATH = "data/sites.json";
+
+type ClientSite = Omit<StoredSite, "settings" | "assets">;
+type ClientSettings = Omit<StoredSettings, "pinHash">;
+type ClientAsset = Omit<StoredAsset, "storageKey">;
+
+function emptyRepository(): SiteRepository {
+  return { version: 1, nextSiteId: 1, nextSettingsId: 1, nextAssetId: 1, sites: [] };
+}
+
+async function readRepository() {
+  return readJson(SITE_DATA_PATH, emptyRepository);
+}
+
+function getSite(repository: SiteRepository, siteId: number) {
+  return repository.sites.find((site) => site.id === siteId);
+}
+
+function toClientSite({ settings: _settings, assets: _assets, ...site }: StoredSite): ClientSite {
+  return site;
+}
+
+function toClientSettings({ pinHash: _pinHash, ...settings }: StoredSettings): ClientSettings {
+  return settings;
+}
+
+function toClientAsset({ storageKey: _storageKey, ...asset }: StoredAsset): ClientAsset {
+  return asset;
+}
+
+function sortAssets(assets: StoredAsset[]) {
+  return [...assets].sort((left, right) =>
+    left.kind.localeCompare(right.kind) || left.sortOrder - right.sortOrder || left.id - right.id,
+  );
+}
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -17,10 +96,11 @@ export async function getDb() {
 
 async function requireDb() {
   const db = await getDb();
-  if (!db) throw new Error("ไม่สามารถเชื่อมต่อฐานข้อมูลได้");
+  if (!db) throw new Error("ไม่สามารถเชื่อมต่อฐานข้อมูลผู้ใช้ได้");
   return db;
 }
 
+/** User records remain compatible with the existing Manus OAuth session contract. */
 export async function upsertUser(user: InsertUser): Promise<void> {
   if (!user.openId) throw new Error("User openId is required for upsert");
   const db = await requireDb();
@@ -39,83 +119,101 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
 }
 
-export async function getUserByOpenId(openId: string) {
+export async function getUserByOpenId(openId: string): Promise<User | undefined> {
   const db = await requireDb();
   return (await db.select().from(users).where(eq(users.openId, openId)).limit(1))[0];
 }
 
 export async function listSitesForOwner(ownerId: number) {
-  const db = await requireDb();
-  return db.select().from(anniversarySites).where(eq(anniversarySites.ownerId, ownerId)).orderBy(desc(anniversarySites.updatedAt), desc(anniversarySites.id));
+  const { data } = await readRepository();
+  return data.sites
+    .filter((site) => site.ownerId === ownerId)
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || right.id - left.id)
+    .map(toClientSite);
 }
 
 export async function getOwnedSiteBySlug(ownerId: number, slug: string) {
-  const db = await requireDb();
-  return (await db.select().from(anniversarySites).where(and(eq(anniversarySites.ownerId, ownerId), eq(anniversarySites.slug, slug))).limit(1))[0];
+  const { data } = await readRepository();
+  return data.sites.find((site) => site.ownerId === ownerId && site.slug === slug);
 }
 
 export async function createSiteForOwner(ownerId: number, input: { title: string; slug: string }) {
-  const db = await requireDb();
-  await db.insert(anniversarySites).values({ ownerId, title: input.title, slug: input.slug });
-  const site = await getOwnedSiteBySlug(ownerId, input.slug);
-  if (!site) throw new Error("ไม่สามารถสร้างเว็บไซต์ใหม่ได้");
-  await db.insert(siteSettings).values({
-    siteId: site.id,
-    pinHash: hashPin(DEFAULT_PIN),
-    startDate: "2024-04-06",
-    memoryMessage: "บันทึกความทรงจำของเรา",
-    musicUrl: "",
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: create ${input.slug}`, (repository) => {
+    if (repository.sites.some((site) => site.slug === input.slug)) {
+      throw new Error("duplicate site slug");
+    }
+    const now = new Date().toISOString();
+    const siteId = repository.nextSiteId++;
+    const site: StoredSite = {
+      id: siteId,
+      ownerId,
+      title: input.title,
+      slug: input.slug,
+      createdAt: now,
+      updatedAt: now,
+      settings: {
+        id: repository.nextSettingsId++,
+        siteId,
+        pinHash: hashPin(DEFAULT_PIN),
+        startDate: "2024-04-06",
+        memoryMessage: "บันทึกความทรงจำของเรา",
+        musicUrl: "",
+        createdAt: now,
+        updatedAt: now,
+      },
+      assets: [],
+    };
+    repository.sites.push(site);
+    return { data: repository, result: toClientSite(site) };
   });
-  return site;
 }
 
 export async function deleteSiteForOwner(ownerId: number, slug: string) {
-  const db = await requireDb();
-  const site = await getOwnedSiteBySlug(ownerId, slug);
-  if (!site) return { success: false };
-  await db.delete(mediaAssets).where(eq(mediaAssets.siteId, site.id));
-  await db.delete(siteSettings).where(eq(siteSettings.siteId, site.id));
-  await db.delete(anniversarySites).where(and(eq(anniversarySites.id, site.id), eq(anniversarySites.ownerId, ownerId)));
-  return { success: true };
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: delete ${slug}`, (repository) => {
+    const index = repository.sites.findIndex((site) => site.ownerId === ownerId && site.slug === slug);
+    if (index === -1) return { data: repository, result: { success: false } };
+    repository.sites.splice(index, 1);
+    return { data: repository, result: { success: true } };
+  });
 }
 
 export async function getSiteSettings(siteId: number) {
-  const db = await requireDb();
-  return (await db.select().from(siteSettings).where(eq(siteSettings.siteId, siteId)).limit(1))[0];
+  const { data } = await readRepository();
+  return getSite(data, siteId)?.settings;
 }
 
 export async function listMediaAssets(siteId: number, kind?: MediaKind) {
-  const db = await requireDb();
-  const where = kind ? and(eq(mediaAssets.siteId, siteId), eq(mediaAssets.kind, kind)) : eq(mediaAssets.siteId, siteId);
-  return db.select().from(mediaAssets).where(where).orderBy(asc(mediaAssets.kind), asc(mediaAssets.sortOrder), asc(mediaAssets.id));
+  const { data } = await readRepository();
+  const site = getSite(data, siteId);
+  if (!site) return [];
+  return sortAssets(kind ? site.assets.filter((asset) => asset.kind === kind) : site.assets);
 }
 
 export async function getPrivateSiteData(ownerId: number, slug: string) {
   const site = await getOwnedSiteBySlug(ownerId, slug);
   if (!site) return undefined;
-  const settings = await getSiteSettings(site.id);
-  if (!settings) throw new Error("ไม่พบข้อมูลการตั้งค่าเว็บไซต์");
-  const assets = await listMediaAssets(site.id);
+  const assets = sortAssets(site.assets);
   return {
-    site,
+    site: toClientSite(site),
     settings: {
-      id: settings.id,
-      startDate: settings.startDate,
-      memoryMessage: settings.memoryMessage,
-      musicUrl: settings.musicUrl,
+      id: site.settings.id,
+      startDate: site.settings.startDate,
+      memoryMessage: site.settings.memoryMessage,
+      musicUrl: site.settings.musicUrl,
     },
-    images: assets.filter((asset) => asset.kind === "image"),
-    videos: assets.filter((asset) => asset.kind === "video"),
+    images: assets.filter((asset) => asset.kind === "image").map(toClientAsset),
+    videos: assets.filter((asset) => asset.kind === "video").map(toClientAsset),
   };
 }
 
 export async function getAdminSiteData(ownerId: number, slug: string) {
   const site = await getOwnedSiteBySlug(ownerId, slug);
   if (!site) return undefined;
-  const settings = await getSiteSettings(site.id);
-  if (!settings) throw new Error("ไม่พบข้อมูลการตั้งค่าเว็บไซต์");
-  const assets = await listMediaAssets(site.id);
-  return { site, settings, assets };
+  return {
+    site: toClientSite(site),
+    settings: toClientSettings(site.settings),
+    assets: sortAssets(site.assets).map(toClientAsset),
+  };
 }
 
 export async function verifySitePin(siteId: number, pin: string) {
@@ -124,52 +222,80 @@ export async function verifySitePin(siteId: number, pin: string) {
 }
 
 export async function updateSiteSettings(siteId: number, input: { memoryMessage: string; startDate: string; pin?: string; musicUrl: string }) {
-  const db = await requireDb();
-  await db.update(siteSettings).set({
-    memoryMessage: input.memoryMessage,
-    startDate: input.startDate,
-    musicUrl: input.musicUrl,
-    ...(input.pin ? { pinHash: hashPin(input.pin) } : {}),
-  }).where(eq(siteSettings.siteId, siteId));
-  const settings = await getSiteSettings(siteId);
-  if (!settings) throw new Error("ไม่สามารถบันทึกการตั้งค่าได้");
-  return settings;
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update settings ${siteId}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) throw new Error("ไม่พบเว็บไซต์สำหรับบันทึกการตั้งค่า");
+    const now = new Date().toISOString();
+    site.settings = {
+      ...site.settings,
+      memoryMessage: input.memoryMessage,
+      startDate: input.startDate,
+      musicUrl: input.musicUrl,
+      ...(input.pin ? { pinHash: hashPin(input.pin) } : {}),
+      updatedAt: now,
+    };
+    site.updatedAt = now;
+    return { data: repository, result: toClientSettings(site.settings) };
+  });
 }
 
 export async function setMusicUrl(siteId: number, musicUrl: string) {
-  const db = await requireDb();
-  await db.update(siteSettings).set({ musicUrl }).where(eq(siteSettings.siteId, siteId));
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update music ${siteId}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) throw new Error("ไม่พบเว็บไซต์สำหรับบันทึกเพลง");
+    const now = new Date().toISOString();
+    site.settings.musicUrl = musicUrl;
+    site.settings.updatedAt = now;
+    site.updatedAt = now;
+    return { data: repository, result: undefined };
+  });
 }
 
 export async function createMediaAsset(siteId: number, input: { kind: MediaKind; originalName: string; mimeType: string; bytes: Buffer }) {
-  const db = await requireDb();
-  const current = await listMediaAssets(siteId, input.kind);
-  const nextOrder = (current.at(-1)?.sortOrder ?? -1) + 1;
   const fileName = safeFileName(input.originalName);
   const storageKey = `anniversary/${siteId}/${input.kind}/${Date.now()}-${nanoid(10)}-${fileName}`;
   const uploaded = await storagePut(storageKey, input.bytes, input.mimeType);
-  await db.insert(mediaAssets).values({
-    siteId,
-    kind: input.kind,
-    storageKey: uploaded.key,
-    url: uploaded.url,
-    originalName: input.originalName,
-    mimeType: input.mimeType,
-    sortOrder: nextOrder,
+
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: add ${input.kind} ${siteId}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) throw new Error("ไม่พบเว็บไซต์สำหรับบันทึกสื่อ");
+    const nextOrder = (site.assets.filter((asset) => asset.kind === input.kind).at(-1)?.sortOrder ?? -1) + 1;
+    const created: StoredAsset = {
+      id: repository.nextAssetId++,
+      siteId,
+      kind: input.kind,
+      storageKey: uploaded.key,
+      url: uploaded.url,
+      originalName: input.originalName,
+      mimeType: input.mimeType,
+      sortOrder: nextOrder,
+      createdAt: new Date().toISOString(),
+    };
+    site.assets.push(created);
+    site.updatedAt = new Date().toISOString();
+    return { data: repository, result: toClientAsset(created) };
   });
-  const created = (await db.select().from(mediaAssets).where(and(eq(mediaAssets.siteId, siteId), eq(mediaAssets.storageKey, uploaded.key))).limit(1))[0];
-  if (!created) throw new Error("ไม่สามารถบันทึกข้อมูลไฟล์ได้");
-  return created;
 }
 
 export async function deleteMediaAsset(siteId: number, id: number) {
-  const db = await requireDb();
-  await db.delete(mediaAssets).where(and(eq(mediaAssets.siteId, siteId), eq(mediaAssets.id, id)));
-  return { success: true };
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: remove media ${id}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) return { data: repository, result: { success: false } };
+    const assetIndex = site.assets.findIndex((asset) => asset.id === id);
+    if (assetIndex === -1) return { data: repository, result: { success: false } };
+    site.assets.splice(assetIndex, 1);
+    site.updatedAt = new Date().toISOString();
+    return { data: repository, result: { success: true } };
+  });
 }
 
 export async function updateMediaOrder(siteId: number, id: number, sortOrder: number) {
-  const db = await requireDb();
-  await db.update(mediaAssets).set({ sortOrder }).where(and(eq(mediaAssets.siteId, siteId), eq(mediaAssets.id, id)));
-  return { success: true };
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: reorder media ${id}`, (repository) => {
+    const site = getSite(repository, siteId);
+    const asset = site?.assets.find((item) => item.id === id);
+    if (!site || !asset) return { data: repository, result: { success: false } };
+    asset.sortOrder = sortOrder;
+    site.updatedAt = new Date().toISOString();
+    return { data: repository, result: { success: true } };
+  });
 }
