@@ -86,3 +86,4 @@
 - [x] Deploy โค้ด password login ล่าสุดขึ้น Vercel production และทดสอบ protected routes จริง
 - [x] ยืนยันบน production ว่า `/api/trpc` ทำงานและ `/api/oauth/callback` ไม่ถูกใช้งานแล้ว
 - [x] ตรวจ UI/interaction ของ auth gate ใน Dashboard, Home, Settings และ DashboardLayout บน production
+- [x] เปลี่ยน Vercel production subdomain เป็น `weblovesite` และตรวจ URL ใหม่
