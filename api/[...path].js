@@ -25,6 +25,7 @@ var decodeOAuthState = (state) => {
 
 // server/routers.ts
 import { TRPCError as TRPCError4 } from "@trpc/server";
+import { z as z3 } from "zod";
 
 // server/_core/cookies.ts
 var LOCAL_HOSTS = /* @__PURE__ */ new Set(["localhost", "127.0.0.1", "::1"]);
@@ -51,8 +52,7 @@ function getSessionCookieOptions(req) {
 }
 
 // server/_core/ownerAuth.ts
-import { parse as parseCookie } from "cookie";
-import { SignJWT as SignJWT2, jwtVerify as jwtVerify2 } from "jose";
+import { timingSafeEqual } from "crypto";
 
 // server/db.ts
 import { nanoid } from "nanoid";
@@ -595,32 +595,6 @@ async function updateMediaOrder(siteId, id, sortOrder) {
   });
 }
 
-// server/email.ts
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char] ?? char);
-}
-function buildLoveOfficeEmailHtml(message) {
-  return `<main style="max-width:560px;margin:0 auto;padding:32px;background:#fff7fb;color:#31202c;font-family:Arial,sans-serif"><div style="padding:28px;border:1px solid #f9a8d4;border-radius:20px;background:#fff"><p style="margin:0 0 14px;color:#db2777;font-weight:700">LoveOffice</p><div style="font-size:16px;line-height:1.75;white-space:normal">${escapeHtml(message).replace(/\n/g, "<br />")}</div></div></main>`;
-}
-function buildQuestionAnswerSummary(answers) {
-  return answers.map(({ question, answer }, index) => `\u0E04\u0E33\u0E16\u0E32\u0E21\u0E02\u0E49\u0E2D ${index + 1}: ${question}
-
-\u0E04\u0E33\u0E15\u0E2D\u0E1A: ${answer}`).join("\n\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n");
-}
-async function sendLoveOfficeEmail(input, request2 = fetch) {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) throw new Error("\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32 Resend API key");
-  const from = process.env.RESEND_FROM_EMAIL || "LoveOffice <onboarding@resend.dev>";
-  const response = await request2("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from, to: [input.to], subject: input.subject, text: input.message, html: buildLoveOfficeEmailHtml(input.message) })
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.message || payload.name || "\u0E2A\u0E48\u0E07\u0E2D\u0E35\u0E40\u0E21\u0E25\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08");
-  return { id: payload.id ?? "" };
-}
-
 // shared/_core/errors.ts
 var HttpError = class extends Error {
   constructor(statusCode, message) {
@@ -879,86 +853,33 @@ function buildCronUser(userInfo) {
 var sdk = new SDKServer();
 
 // server/_core/ownerAuth.ts
-var MAGIC_LINK_TTL_SECONDS = 10 * 60;
-var MAGIC_LINK_COOLDOWN_MS = 60 * 1e3;
-var MAGIC_LINK_COOKIE = "owner_magic_link_cooldown";
-var MAGIC_LINK_ISSUER = "loveoffice";
-var MAGIC_LINK_AUDIENCE = "owner-magic-link";
-var OWNER_DASHBOARD_PATH = "/loveoffice-console-5h9q2x7m4k8v1r6d3";
-function magicLinkSecret() {
-  const secret2 = process.env.JWT_SECRET;
-  if (!secret2) throw new Error("\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32 JWT secret");
-  return new TextEncoder().encode(secret2);
-}
-function getAllowedOwnerEmail() {
-  return process.env.OWNER_ALLOWED_EMAIL?.trim().toLowerCase() ?? "";
-}
-function requestOrigin(req) {
-  if (process.env.NODE_ENV === "production") return "https://loveoffice-memory.vercel.app";
-  return `${req.protocol || "http"}://${req.get("host") || "localhost:3000"}`;
-}
-function hasMagicLinkCooldown(req) {
-  return Boolean(parseCookie(req.header("cookie") ?? "")[MAGIC_LINK_COOKIE]);
-}
-async function createOwnerMagicLinkToken(email) {
-  const allowedEmail = getAllowedOwnerEmail();
-  if (!allowedEmail || email.trim().toLowerCase() !== allowedEmail) throw new Error("\u0E2D\u0E35\u0E40\u0E21\u0E25\u0E19\u0E35\u0E49\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A\u0E2D\u0E19\u0E38\u0E0D\u0E32\u0E15");
-  return new SignJWT2({ email: allowedEmail }).setProtectedHeader({ alg: "HS256" }).setIssuer(MAGIC_LINK_ISSUER).setAudience(MAGIC_LINK_AUDIENCE).setJti(crypto.randomUUID()).setIssuedAt().setExpirationTime(`${MAGIC_LINK_TTL_SECONDS}s`).sign(magicLinkSecret());
-}
-async function verifyOwnerMagicLinkToken(token) {
-  const { payload } = await jwtVerify2(token, magicLinkSecret(), { issuer: MAGIC_LINK_ISSUER, audience: MAGIC_LINK_AUDIENCE });
-  const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
-  if (!email || email !== getAllowedOwnerEmail()) throw new Error("\u0E25\u0E34\u0E07\u0E01\u0E4C\u0E19\u0E35\u0E49\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A\u0E2D\u0E19\u0E38\u0E0D\u0E32\u0E15");
-  return email;
-}
-async function requestOwnerMagicLink(req, res) {
-  const allowedEmail = getAllowedOwnerEmail();
-  if (!allowedEmail) throw new Error("\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32\u0E2D\u0E35\u0E40\u0E21\u0E25\u0E40\u0E08\u0E49\u0E32\u0E02\u0E2D\u0E07");
-  if (hasMagicLinkCooldown(req)) return { success: true, cooldown: true };
-  const token = await createOwnerMagicLinkToken(allowedEmail);
-  const link = `${requestOrigin(req)}/api/owner-auth/verify?token=${encodeURIComponent(token)}`;
-  await sendLoveOfficeEmail({
-    to: allowedEmail,
-    subject: "\u0E25\u0E34\u0E07\u0E01\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E2B\u0E25\u0E31\u0E07\u0E1A\u0E49\u0E32\u0E19 LoveOffice",
-    message: `\u0E01\u0E14\u0E25\u0E34\u0E07\u0E01\u0E4C\u0E19\u0E35\u0E49\u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E2B\u0E25\u0E31\u0E07\u0E1A\u0E49\u0E32\u0E19 LoveOffice:
-${link}
-
-\u0E25\u0E34\u0E07\u0E01\u0E4C\u0E19\u0E35\u0E49\u0E08\u0E30\u0E2B\u0E21\u0E14\u0E2D\u0E32\u0E22\u0E38\u0E20\u0E32\u0E22\u0E43\u0E19 10 \u0E19\u0E32\u0E17\u0E35 \u0E2B\u0E32\u0E01\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E40\u0E1B\u0E47\u0E19\u0E1C\u0E39\u0E49\u0E02\u0E2D \u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E25\u0E30\u0E40\u0E27\u0E49\u0E19\u0E2D\u0E35\u0E40\u0E21\u0E25\u0E09\u0E1A\u0E31\u0E1A\u0E19\u0E35\u0E49\u0E44\u0E14\u0E49`
-  });
-  res.cookie(MAGIC_LINK_COOKIE, "1", { ...getSessionCookieOptions(req), httpOnly: true, maxAge: MAGIC_LINK_COOLDOWN_MS });
-  return { success: true, cooldown: false };
+var OWNER_SESSION_MS = 7 * 24 * 60 * 60 * 1e3;
+function isOwnerPasscodeValid(passcode) {
+  const configuredPasscode = process.env.OWNER_LOGIN_PASSWORD;
+  if (typeof passcode !== "string" || !configuredPasscode || !/^\d{6,12}$/.test(passcode) || !/^\d{6,12}$/.test(configuredPasscode)) return false;
+  const candidate = Buffer.from(passcode, "utf8");
+  const expected = Buffer.from(configuredPasscode, "utf8");
+  return candidate.length === expected.length && timingSafeEqual(candidate, expected);
 }
 async function issueOwnerSession(req, res) {
   if (!ENV.ownerOpenId) throw new Error("owner login is not configured");
   const owner = await getUserByOpenId(ENV.ownerOpenId);
   if (!owner || owner.role !== "admin") throw new Error("owner account is not available");
-  const sessionToken = await sdk.createSessionToken(owner.openId, { name: owner.name || "Owner", expiresInMs: ONE_YEAR_MS });
-  res.cookie(COOKIE_NAME, sessionToken, { ...getSessionCookieOptions(req), maxAge: ONE_YEAR_MS });
+  const sessionToken = await sdk.createSessionToken(owner.openId, { name: owner.name || "Owner", expiresInMs: OWNER_SESSION_MS });
+  res.cookie(COOKIE_NAME, sessionToken, { ...getSessionCookieOptions(req), maxAge: OWNER_SESSION_MS });
   return { success: true };
 }
-function registerOwnerEmailAuthRoutes(app) {
-  app.post("/api/owner-auth/request-link", async (req, res) => {
+function registerOwnerPasscodeAuthRoutes(app) {
+  app.post("/api/owner-auth/login", async (req, res) => {
     try {
-      const result = await requestOwnerMagicLink(req, res);
-      res.status(200).json(result);
-    } catch (error) {
-      console.error("[OwnerAuth] Magic link request failed", error);
-      res.status(500).json({ error: "\u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E2A\u0E48\u0E07\u0E25\u0E34\u0E07\u0E01\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E44\u0E14\u0E49" });
-    }
-  });
-  app.get("/api/owner-auth/verify", async (req, res) => {
-    try {
-      const token = typeof req.query.token === "string" ? req.query.token : "";
-      if (!token) {
-        res.status(400).send("\u0E25\u0E34\u0E07\u0E01\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07");
+      if (!isOwnerPasscodeValid(req.body?.passcode)) {
+        res.status(401).json({ error: "\u0E23\u0E2B\u0E31\u0E2A\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07" });
         return;
       }
-      await verifyOwnerMagicLinkToken(token);
-      await issueOwnerSession(req, res);
-      res.redirect(303, OWNER_DASHBOARD_PATH);
+      res.status(200).json(await issueOwnerSession(req, res));
     } catch (error) {
-      console.error("[OwnerAuth] Magic link verification failed", error);
-      res.status(401).send("\u0E25\u0E34\u0E07\u0E01\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07\u0E2B\u0E23\u0E37\u0E2D\u0E2B\u0E21\u0E14\u0E2D\u0E32\u0E22\u0E38\u0E41\u0E25\u0E49\u0E27");
+      console.error("[OwnerAuth] Passcode login failed", error);
+      res.status(500).json({ error: "\u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E44\u0E14\u0E49" });
     }
   });
   app.post("/api/owner-auth/logout", (req, res) => {
@@ -1114,6 +1035,32 @@ var systemRouter = router({
 import { TRPCError as TRPCError3 } from "@trpc/server";
 import { z as z2 } from "zod";
 
+// server/email.ts
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char] ?? char);
+}
+function buildLoveOfficeEmailHtml(message) {
+  return `<main style="max-width:560px;margin:0 auto;padding:32px;background:#fff7fb;color:#31202c;font-family:Arial,sans-serif"><div style="padding:28px;border:1px solid #f9a8d4;border-radius:20px;background:#fff"><p style="margin:0 0 14px;color:#db2777;font-weight:700">LoveOffice</p><div style="font-size:16px;line-height:1.75;white-space:normal">${escapeHtml(message).replace(/\n/g, "<br />")}</div></div></main>`;
+}
+function buildQuestionAnswerSummary(answers) {
+  return answers.map(({ question, answer }, index) => `\u0E04\u0E33\u0E16\u0E32\u0E21\u0E02\u0E49\u0E2D ${index + 1}: ${question}
+
+\u0E04\u0E33\u0E15\u0E2D\u0E1A: ${answer}`).join("\n\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n");
+}
+async function sendLoveOfficeEmail(input, request2 = fetch) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) throw new Error("\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32 Resend API key");
+  const from = process.env.RESEND_FROM_EMAIL || "LoveOffice <onboarding@resend.dev>";
+  const response = await request2("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to: [input.to], subject: input.subject, text: input.message, html: buildLoveOfficeEmailHtml(input.message) })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.message || payload.name || "\u0E2A\u0E48\u0E07\u0E2D\u0E35\u0E40\u0E21\u0E25\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08");
+  return { id: payload.id ?? "" };
+}
+
 // server/letterResponse.ts
 var lastResponseByVisitor = /* @__PURE__ */ new Map();
 var MIN_FORM_OPEN_MS = 2e3;
@@ -1131,20 +1078,20 @@ function recordLetterResponse(visitorKey, now = Date.now()) {
 
 // server/visitorAccess.ts
 import { parse as parseCookieHeader2 } from "cookie";
-import { SignJWT as SignJWT3, jwtVerify as jwtVerify3 } from "jose";
+import { SignJWT as SignJWT2, jwtVerify as jwtVerify2 } from "jose";
 var VISITOR_ACCESS_COOKIE = "loveoffice_site_access";
 var VISITOR_ACCESS_MS = 24 * 60 * 60 * 1e3;
 function secret() {
   return new TextEncoder().encode(ENV.cookieSecret);
 }
 async function createVisitorAccessToken(siteId, now = Date.now()) {
-  return new SignJWT3({ siteId, scope: "public-site" }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setExpirationTime(Math.floor((now + VISITOR_ACCESS_MS) / 1e3)).sign(secret());
+  return new SignJWT2({ siteId, scope: "public-site" }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setExpirationTime(Math.floor((now + VISITOR_ACCESS_MS) / 1e3)).sign(secret());
 }
 async function getVisitorSiteId(req) {
   const token = parseCookieHeader2(req.headers.cookie ?? "")[VISITOR_ACCESS_COOKIE];
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify3(token, secret(), { algorithms: ["HS256"] });
+    const { payload } = await jwtVerify2(token, secret(), { algorithms: ["HS256"] });
     return payload.scope === "public-site" && typeof payload.siteId === "number" && Number.isInteger(payload.siteId) ? payload.siteId : null;
   } catch {
     return null;
@@ -1332,12 +1279,15 @@ var appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
-    requestMagicLink: publicProcedure.mutation(async ({ ctx }) => {
+    login: publicProcedure.input(z3.object({ passcode: z3.string().regex(/^\d{6,12}$/) })).mutation(async ({ ctx, input }) => {
+      if (!isOwnerPasscodeValid(input.passcode)) {
+        throw new TRPCError4({ code: "UNAUTHORIZED", message: "\u0E23\u0E2B\u0E31\u0E2A\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07" });
+      }
       try {
-        return await requestOwnerMagicLink(ctx.req, ctx.res);
+        return await issueOwnerSession(ctx.req, ctx.res);
       } catch (error) {
-        console.error("[OwnerAuth] Magic link request failed", error);
-        throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "\u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E2A\u0E48\u0E07\u0E25\u0E34\u0E07\u0E01\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E44\u0E14\u0E49" });
+        console.error("[OwnerAuth] Passcode login failed", error);
+        throw new TRPCError4({ code: "INTERNAL_SERVER_ERROR", message: "\u0E44\u0E21\u0E48\u0E2A\u0E32\u0E21\u0E32\u0E23\u0E16\u0E40\u0E02\u0E49\u0E32\u0E2A\u0E39\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E44\u0E14\u0E49" });
       }
     }),
     logout: publicProcedure.mutation(({ ctx }) => {
@@ -1411,7 +1361,7 @@ function createApp() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
-  registerOwnerEmailAuthRoutes(app);
+  registerOwnerPasscodeAuthRoutes(app);
   app.use(
     "/api/trpc",
     createExpressMiddleware({
