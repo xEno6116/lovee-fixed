@@ -9,6 +9,8 @@ function isIpAddress(host: string) {
 }
 
 function isSecureRequest(req: Request) {
+  const hostname = req.hostname?.split(":")[0]?.toLowerCase() ?? "";
+  if (hostname && !LOCAL_HOSTS.has(hostname) && !isIpAddress(hostname)) return true;
   if (req.protocol === "https") return true;
 
   const forwardedProto = req.headers["x-forwarded-proto"];
