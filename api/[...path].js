@@ -244,6 +244,7 @@ async function storagePut(relKey, data, contentType = "application/octet-stream"
 // server/db.ts
 var defaultFeatureSettings = () => ({
   songLabel: "Our Song \u2764\uFE0F",
+  puzzleImageId: 0,
   welcomeTitle: "",
   welcomeMessage: "",
   fontFamily: "gaegu",
@@ -1136,6 +1137,7 @@ var storyNoteInput = z2.object({ id: z2.string().min(1).max(80), title: z2.strin
 var questionEntryInput = z2.object({ id: z2.string().trim().min(1).max(80), prompt: z2.string().trim().min(1).max(500) });
 var featureInput = z2.object({
   songLabel: z2.string().trim().max(120),
+  puzzleImageId: z2.number().int().nonnegative().default(0),
   welcomeTitle: z2.string().trim().max(160),
   welcomeMessage: z2.string().trim().max(1e3),
   fontFamily: z2.enum(["gaegu", "serif", "sans"]),
@@ -1267,6 +1269,12 @@ var siteRouter = router({
     }),
     saveSettings: protectedProcedure.input(settingsInput).mutation(async ({ ctx, input }) => {
       const site = await requireOwnedSite(ctx.user.id, input.slug);
+      if (input.features.puzzleImageId) {
+        const images = await listMediaAssets(site.id, "image");
+        if (!images.some((image) => image.id === input.features.puzzleImageId)) {
+          throw new TRPCError3({ code: "BAD_REQUEST", message: "\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E23\u0E39\u0E1B\u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A\u0E08\u0E34\u0E4A\u0E01\u0E0B\u0E2D\u0E08\u0E32\u0E01\u0E23\u0E39\u0E1B\u0E20\u0E32\u0E1E\u0E02\u0E2D\u0E07\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49\u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19" });
+        }
+      }
       return updateSiteSettings(site.id, { ...input, features: input.features });
     }),
     sendEmail: protectedProcedure.input(sendEmailInput).mutation(async ({ ctx, input }) => {

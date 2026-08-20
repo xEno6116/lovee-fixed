@@ -13,6 +13,7 @@ type StoryNote = { id: string; title: string; body: string; publishAt: string };
 export type QuestionEntry = { id: string; prompt: string };
 export type FeatureSettings = {
   songLabel: string;
+  puzzleImageId: number;
   welcomeTitle: string;
   welcomeMessage: string;
   fontFamily: "gaegu" | "serif" | "sans";
@@ -40,7 +41,7 @@ export type FeatureSettings = {
 };
 
 const defaultFeatureSettings = (): FeatureSettings => ({
-  songLabel: "Our Song ❤️", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", customFontUrl: "", customFontName: "", backgroundStyle: "soft", themeMode: "light", visualTheme: "soft-love", questionLetterEnabled: false, questionLetterTitle: "คำถามถึงเธอ", questionLetterPrompts: [], questionLetterRecipient: "",
+  songLabel: "Our Song ❤️", puzzleImageId: 0, welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", customFontUrl: "", customFontName: "", backgroundStyle: "soft", themeMode: "light", visualTheme: "soft-love", questionLetterEnabled: false, questionLetterTitle: "คำถามถึงเธอ", questionLetterPrompts: [], questionLetterRecipient: "",
   hideVideos: false, hideGallery: false, hideMessage: false, surpriseTitle: "", surpriseMessage: "", surpriseAt: "", timeline: [], places: [], notes: [], ownerNote: "",
 });
 
