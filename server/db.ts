@@ -14,6 +14,7 @@ export type QuestionEntry = { id: string; prompt: string };
 export type FeatureSettings = {
   songLabel: string;
   puzzleImageId: number;
+  uiLayout: "soft-story" | "polaroid-journal" | "midnight-glass";
   welcomeTitle: string;
   welcomeMessage: string;
   fontFamily: "gaegu" | "serif" | "sans";
@@ -41,7 +42,7 @@ export type FeatureSettings = {
 };
 
 const defaultFeatureSettings = (): FeatureSettings => ({
-  songLabel: "Our Song ❤️", puzzleImageId: 0, welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", customFontUrl: "", customFontName: "", backgroundStyle: "soft", themeMode: "light", visualTheme: "soft-love", questionLetterEnabled: false, questionLetterTitle: "คำถามถึงเธอ", questionLetterPrompts: [], questionLetterRecipient: "",
+  songLabel: "Our Song ❤️", puzzleImageId: 0, uiLayout: "soft-story", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", customFontUrl: "", customFontName: "", backgroundStyle: "soft", themeMode: "light", visualTheme: "soft-love", questionLetterEnabled: false, questionLetterTitle: "คำถามถึงเธอ", questionLetterPrompts: [], questionLetterRecipient: "",
   hideVideos: false, hideGallery: false, hideMessage: false, surpriseTitle: "", surpriseMessage: "", surpriseAt: "", timeline: [], places: [], notes: [], ownerNote: "",
 });
 
@@ -170,6 +171,7 @@ function normalizeFeatureSettings(features?: Partial<FeatureSettings>): FeatureS
   const legacyPrompt = normalized.questionLetterPrompt?.trim();
   return {
     ...normalized,
+    uiLayout: normalized.uiLayout === "polaroid-journal" || normalized.uiLayout === "midnight-glass" ? normalized.uiLayout : "soft-story",
     questionLetterPrompts: prompts.length ? prompts : legacyPrompt ? [{ id: "legacy-question", prompt: legacyPrompt }] : [],
   };
 }

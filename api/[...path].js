@@ -245,6 +245,7 @@ async function storagePut(relKey, data, contentType = "application/octet-stream"
 var defaultFeatureSettings = () => ({
   songLabel: "Our Song \u2764\uFE0F",
   puzzleImageId: 0,
+  uiLayout: "soft-story",
   welcomeTitle: "",
   welcomeMessage: "",
   fontFamily: "gaegu",
@@ -297,6 +298,7 @@ function normalizeFeatureSettings(features) {
   const legacyPrompt = normalized.questionLetterPrompt?.trim();
   return {
     ...normalized,
+    uiLayout: normalized.uiLayout === "polaroid-journal" || normalized.uiLayout === "midnight-glass" ? normalized.uiLayout : "soft-story",
     questionLetterPrompts: prompts.length ? prompts : legacyPrompt ? [{ id: "legacy-question", prompt: legacyPrompt }] : []
   };
 }
@@ -1409,6 +1411,7 @@ var questionEntryInput = z2.object({ id: z2.string().trim().min(1).max(80), prom
 var featureInput = z2.object({
   songLabel: z2.string().trim().max(120),
   puzzleImageId: z2.number().int().nonnegative().default(0),
+  uiLayout: z2.enum(["soft-story", "polaroid-journal", "midnight-glass"]).default("soft-story"),
   welcomeTitle: z2.string().trim().max(160),
   welcomeMessage: z2.string().trim().max(1e3),
   fontFamily: z2.enum(["gaegu", "serif", "sans"]),

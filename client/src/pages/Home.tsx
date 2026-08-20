@@ -7,6 +7,7 @@ import { buildCustomFontFace } from "@/fontFace";
 import { getRevealContent } from "@/revealExperience";
 import { isReleasedAt, nextMemoryIndex } from "@/memoryExperience";
 import { getVisualTheme } from "@/themeGallery";
+import { getUiLayout } from "@/uiLayouts";
 
 type TimeParts = { days: number; hours: number; minutes: number; seconds: number };
 
@@ -140,6 +141,7 @@ export default function Home({ slug }: { slug: string }) {
   const nightMode = features.themeMode === "night" || (features.themeMode === "auto" && new Date().getHours() >= 19);
   const customFontFace = buildCustomFontFace(features.customFontUrl);
   const visualTheme = getVisualTheme(features.visualTheme);
+  const uiLayout = getUiLayout(features.uiLayout);
   const questionPrompts = features.questionLetterPrompts;
   const questionLetterLocked = Boolean(site.letterSubmitted || questionSubmitted);
   const revealContent = getRevealContent({ siteTitle: site.site.title, welcomeTitle: features.welcomeTitle, welcomeMessage: features.welcomeMessage, memoryMessage: site.settings.memoryMessage });
@@ -151,7 +153,7 @@ export default function Home({ slug }: { slug: string }) {
   const allQuestionsAnswered = questionPrompts.length > 0 && questionPrompts.every((item) => Boolean(questionAnswers[item.id]?.trim()));
   const submitQuestion = () => { if (!allQuestionsAnswered || !window.confirm("ยืนยันส่งคำตอบทั้งหมดถึงเจ้าของเว็บไซต์?")) return; setQuestionStatus("กำลังส่งคำตอบ…"); submitLetterResponse.mutate({ slug, answers: questionPrompts.map((item) => ({ question: item.prompt, answer: questionAnswers[item.id]?.trim() ?? "" })), startedAt: questionOpenedAt.current, honeypot: questionHoneypot }); };
 
-  return <div className={`legacy-anniversary min-h-screen legacy-bg-${features.backgroundStyle} legacy-visual-${visualTheme.id} ${customFontFace ? "legacy-font-custom" : `legacy-font-${features.fontFamily}`} ${nightMode ? "legacy-night" : ""}`} style={themeStyle}>
+  return <div className={`legacy-anniversary legacy-layout-${uiLayout.id} min-h-screen legacy-bg-${features.backgroundStyle} legacy-visual-${visualTheme.id} ${customFontFace ? "legacy-font-custom" : `legacy-font-${features.fontFamily}`} ${nightMode ? "legacy-night" : ""}`} style={themeStyle}>
     {customFontFace && <style data-custom-font>{customFontFace}</style>}
     <audio ref={audioRef} src={site.settings.musicUrl || undefined} loop onPause={() => setPlaying(false)} onWaiting={() => setPlaying(false)} onPlaying={() => setPlaying(true)} onError={() => setPlaying(false)} />
     {!unlocked && <section className="legacy-lock-screen">

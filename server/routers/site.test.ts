@@ -88,7 +88,7 @@ describe("multi-site router", () => {
     const caller = siteRouter.createCaller({ user: owner } as never);
     const input = { slug: "main-memory", facebookUrl: "https://facebook.com/example", instagramUrl: "https://instagram.com/example", musicUrl: "/manus-storage/sites/9/audio/our-song.mp3", themeColor: "#2563eb", features };
     await expect(caller.admin.saveSettings(input)).resolves.toMatchObject({ id: 42, siteId: 9, themeColor: "#2563eb" });
-    expect(updateSiteSettings).toHaveBeenCalledWith(9, input);
+    expect(updateSiteSettings).toHaveBeenCalledWith(9, expect.objectContaining({ ...input, features: expect.objectContaining({ ...features, uiLayout: "soft-story" }) }));
   });
 
   it("sends email only after resolving the site to its owner", async () => {
@@ -142,6 +142,13 @@ describe("multi-site router", () => {
     const caller = siteRouter.createCaller({ user: owner } as never);
     await expect(caller.admin.saveSettings({ slug: "main-memory", facebookUrl: "", instagramUrl: "", musicUrl: "/manus-storage/sites/9/audio/our-song.mp3", themeColor: "#ec4899", features })).resolves.toMatchObject({ id: 42 });
     await expect(caller.admin.saveSettings({ slug: "main-memory", facebookUrl: "", instagramUrl: "", musicUrl: "https://cdn.example.com/song.mp3", themeColor: "#ec4899", features })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("accepts one of the three saved UI layouts and rejects an unknown layout", async () => {
+    const caller = siteRouter.createCaller({ user: owner } as never);
+    await expect(caller.admin.saveSettings({ slug: "main-memory", facebookUrl: "", instagramUrl: "", musicUrl: "", themeColor: "#ec4899", features: { ...features, uiLayout: "midnight-glass" } })).resolves.toMatchObject({ id: 42 });
+    expect(updateSiteSettings).toHaveBeenLastCalledWith(9, expect.objectContaining({ features: expect.objectContaining({ uiLayout: "midnight-glass" }) }));
+    await expect(caller.admin.saveSettings({ slug: "main-memory", facebookUrl: "", instagramUrl: "", musicUrl: "", themeColor: "#ec4899", features: { ...features, uiLayout: "unknown-layout" } } as never)).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
   it("allows only the site owner to save a caption for an uploaded image", async () => {
