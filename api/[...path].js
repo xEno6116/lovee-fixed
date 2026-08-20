@@ -1275,11 +1275,22 @@ var siteRouter = router({
 });
 
 // server/routers.ts
+var ownerPasscodeInput = z3.object({
+  passcode: z3.string().regex(/^\d{6,12}$/).optional(),
+  password: z3.string().regex(/^\d{6,12}$/).optional()
+}).optional().transform((value, ctx) => {
+  const passcode = value?.passcode ?? value?.password;
+  if (!passcode) {
+    ctx.addIssue({ code: "custom", message: "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E01\u0E23\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 6\u201312 \u0E2B\u0E25\u0E31\u0E01" });
+    return z3.NEVER;
+  }
+  return { passcode };
+});
 var appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
-    login: publicProcedure.input(z3.object({ passcode: z3.string().regex(/^\d{6,12}$/) })).mutation(async ({ ctx, input }) => {
+    login: publicProcedure.input(ownerPasscodeInput).mutation(async ({ ctx, input }) => {
       if (!isOwnerPasscodeValid(input.passcode)) {
         throw new TRPCError4({ code: "UNAUTHORIZED", message: "\u0E23\u0E2B\u0E31\u0E2A\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07" });
       }

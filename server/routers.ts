@@ -7,11 +7,23 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { siteRouter } from "./routers/site";
 
+export const ownerPasscodeInput = z.object({
+  passcode: z.string().regex(/^\d{6,12}$/).optional(),
+  password: z.string().regex(/^\d{6,12}$/).optional(),
+}).optional().transform((value, ctx) => {
+  const passcode = value?.passcode ?? value?.password;
+  if (!passcode) {
+    ctx.addIssue({ code: "custom", message: "กรุณากรอกรหัสตัวเลข 6–12 หลัก" });
+    return z.NEVER;
+  }
+  return { passcode };
+});
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
-    login: publicProcedure.input(z.object({ passcode: z.string().regex(/^\d{6,12}$/) })).mutation(async ({ ctx, input }) => {
+    login: publicProcedure.input(ownerPasscodeInput).mutation(async ({ ctx, input }) => {
       if (!isOwnerPasscodeValid(input.passcode)) {
         throw new TRPCError({ code: "UNAUTHORIZED", message: "รหัสตัวเลขไม่ถูกต้อง" });
       }
