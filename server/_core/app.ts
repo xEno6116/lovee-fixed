@@ -2,7 +2,7 @@ import express from "express";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
-import { registerOwnerPasswordAuthRoutes } from "./ownerAuth";
+import { registerOwnerEmailAuthRoutes } from "./ownerAuth";
 import { registerStorageProxy } from "./storageProxy";
 
 /**
@@ -14,7 +14,7 @@ export function createApp() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
-  registerOwnerPasswordAuthRoutes(app);
+  registerOwnerEmailAuthRoutes(app);
   app.use(
     "/api/trpc",
     createExpressMiddleware({
