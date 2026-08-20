@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { BookHeart, ChevronLeft, ChevronRight, Facebook, Instagram, MapPin, Pause, Play, QrCode, Share2, Sparkles, Video } from "lucide-react";
+import { BookHeart, ChevronLeft, ChevronRight, Facebook, Heart, Instagram, MapPin, Pause, Play, QrCode, Share2, Sparkles, Video } from "lucide-react";
 import QRCode from "qrcode";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { OwnerLoginButton } from "@/components/OwnerLoginModal";
 import { trpc } from "@/lib/trpc";
+import { createFloatingHeart, type FloatingHeart } from "@/heartEffect";
 import { buildCustomFontFace } from "@/fontFace";
 
 type TimeParts = { days: number; hours: number; minutes: number; seconds: number };
@@ -31,6 +32,7 @@ export default function Home({ slug }: { slug: string }) {
   const [playing, setPlaying] = useState(false);
   const [qrCode, setQrCode] = useState("");
   const [playerPosition, setPlayerPosition] = useState({ x: 0, y: 0 });
+  const [floatingHearts, setFloatingHearts] = useState<FloatingHeart[]>([]);
   const audioRef = useRef<HTMLAudioElement>(null);
   const playerDragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null);
 
@@ -70,6 +72,12 @@ export default function Home({ slug }: { slug: string }) {
   const startPlayerDrag = (event: React.PointerEvent<HTMLDivElement>) => { playerDragRef.current = { startX: event.clientX, startY: event.clientY, baseX: playerPosition.x, baseY: playerPosition.y }; event.currentTarget.setPointerCapture(event.pointerId); };
   const movePlayer = (event: React.PointerEvent<HTMLDivElement>) => { const drag = playerDragRef.current; if (!drag) return; setPlayerPosition({ x: drag.baseX + event.clientX - drag.startX, y: drag.baseY + event.clientY - drag.startY }); };
   const endPlayerDrag = () => { playerDragRef.current = null; };
+  const launchHeart = (event: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const heart: FloatingHeart = createFloatingHeart({ id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`, x: rect.left + rect.width / 2, y: rect.top });
+    setFloatingHearts((items) => [...items.slice(-14), heart]);
+    window.setTimeout(() => setFloatingHearts((items) => items.filter((item) => item.id !== heart.id)), 1_250);
+  };
 
   if (loading) return <div className="legacy-loading">กำลังตรวจสอบสิทธิ์การเข้าถึง…</div>;
   if (!isAuthenticated) return <div className="legacy-loading"><div className="text-center"><p>เว็บไซต์นี้เป็นส่วนตัวสำหรับเจ้าของเท่านั้น</p><OwnerLoginButton className="legacy-save-btn mt-5">เข้าสู่ระบบเจ้าของ</OwnerLoginButton></div></div>;
@@ -100,7 +108,7 @@ export default function Home({ slug }: { slug: string }) {
       <p className="legacy-lock-error">{verifyPin.isPending ? "กำลังตรวจสอบ…" : error}</p>
     </section>}
     {unlocked && <main className="legacy-main-content">
-      <header className="legacy-header"><h1>{site.site.title}</h1>{features.welcomeTitle && <p className="legacy-welcome-title">{features.welcomeTitle}</p>}{features.welcomeMessage && <p className="legacy-welcome-message">{features.welcomeMessage}</p>}<div className="legacy-clock"><ClockBox value={clock.days} label="วัน" /><ClockBox value={clock.hours} label="ชั่วโมง" /><ClockBox value={clock.minutes} label="นาที" /><ClockBox value={clock.seconds} label="วินาที" /></div></header>
+      <header className="legacy-header"><h1>{site.site.title}</h1>{features.welcomeTitle && <p className="legacy-welcome-title">{features.welcomeTitle}</p>}{features.welcomeMessage && <p className="legacy-welcome-message">{features.welcomeMessage}</p>}<button type="button" className="legacy-heart-button" onClick={launchHeart}><Heart size={16} fill="currentColor" />ส่งหัวใจ</button><div className="legacy-clock"><ClockBox value={clock.days} label="วัน" /><ClockBox value={clock.hours} label="ชั่วโมง" /><ClockBox value={clock.minutes} label="นาที" /><ClockBox value={clock.seconds} label="วินาที" /></div></header>
       {showSurprise && <section className="legacy-section"><div className="legacy-surprise"><Sparkles size={25} /><div><h3>{features.surpriseTitle || "เซอร์ไพรส์สำหรับเธอ"}</h3><p>{features.surpriseMessage}</p></div></div></section>}
       {!features.hideVideos && <section className="legacy-section legacy-video-section"><div className="legacy-section-inner"><h3>วิดีโอ 🎬</h3><p className="legacy-section-hint">เลื่อนด้วยลูกศรเพื่อดูช่องวิดีโอทั้ง 4 ช่อง</p><div className="legacy-video-shell"><button type="button" className="legacy-arrow legacy-arrow-prev" onClick={() => setVideoIndex((index) => (index + 3) % 4)} aria-label="ช่องวิดีโอก่อนหน้า"><ChevronLeft size={22} /></button><div className="legacy-video-viewport"><div className="legacy-video-track" style={{ transform: `translateX(-${videoIndex * 100}%)` }}>{videoSlots.map((asset, index) => <div className="legacy-video-slide" key={asset?.id ?? `slot-${index}`}>{asset ? <video className="size-full object-contain bg-slate-950" controls playsInline src={asset.url} /> : <div className="legacy-empty-media"><Video size={34} /><strong>ช่องวิดีโอ {index + 1}</strong><span>ยังไม่มีไฟล์</span></div>}</div>)}</div></div><button type="button" className="legacy-arrow legacy-arrow-next" onClick={() => setVideoIndex((index) => (index + 1) % 4)} aria-label="ช่องวิดีโอถัดไป"><ChevronRight size={22} /></button></div><p className="legacy-counter">{videoIndex + 1}/4</p></div></section>}
       {!features.hideMessage && <section className="legacy-section legacy-message-section"><div className="legacy-glass-card"><p>{site.settings.memoryMessage}</p></div></section>}
@@ -111,5 +119,6 @@ export default function Home({ slug }: { slug: string }) {
       <footer className="legacy-footer"><p>อยู่ด้วยกันตลอดไปนะ 💖🌷</p>{hasContacts && <nav className="legacy-contact-links" aria-label="ช่องทางติดต่อ">{site.settings.facebookUrl && <a href={site.settings.facebookUrl} target="_blank" rel="noreferrer" aria-label="Facebook"><Facebook size={19} /><span>Facebook</span></a>}{site.settings.instagramUrl && <a href={site.settings.instagramUrl} target="_blank" rel="noreferrer" aria-label="Instagram"><Instagram size={19} /><span>Instagram</span></a>}</nav>}<div className="legacy-share"><button type="button" onClick={share}><Share2 size={17} />แชร์ลิงก์</button>{qrCode && <details><summary><QrCode size={17} />QR Code</summary><img src={qrCode} alt="QR Code สำหรับเปิดเว็บไซต์นี้" /></details>}</div></footer>
     </main>}
     {unlocked && <div className={`legacy-cd-player ${playing ? "playing" : ""}`} style={playerStyle} onPointerMove={movePlayer} onPointerUp={endPlayerDrag} onPointerCancel={endPlayerDrag}><div className="legacy-cd-case legacy-cd-grab" onPointerDown={startPlayerDrag} title="ลากเพื่อย้ายตำแหน่ง"><div className="legacy-cd-disc"><div className="legacy-cd-center" /></div></div><div><p className="legacy-cd-label">{features.songLabel || "Our Song ❤️"}</p><button type="button" className="legacy-cd-button" onClick={toggleMusic} disabled={!site.settings.musicUrl} aria-label="เล่นหรือหยุดเพลง">{playing ? <Pause size={13} /> : <Play size={13} fill="currentColor" />}</button></div></div>}
+    <div className="legacy-floating-hearts" aria-hidden="true">{floatingHearts.map((heart) => <span key={heart.id} style={{ "--legacy-heart-x": `${heart.x}px`, "--legacy-heart-y": `${heart.y}px`, "--legacy-heart-size": `${heart.size}px`, "--legacy-heart-drift": `${heart.drift}px` } as CSSProperties & { "--legacy-heart-x": string; "--legacy-heart-y": string; "--legacy-heart-size": string; "--legacy-heart-drift": string }}>♥</span>)}</div>
   </div>;
 }
