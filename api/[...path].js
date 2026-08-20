@@ -185,6 +185,14 @@ function isAllowedFont(fileName, mimeType) {
   const extension = fileName.toLowerCase().match(/\.(woff2?|ttf|otf)$/)?.[1];
   return Boolean(extension) && (mimeType.startsWith("font/") || mimeType === "application/font-sfnt" || mimeType === "application/vnd.ms-fontobject" || mimeType === "application/octet-stream");
 }
+function fontMimeTypeFromFileName(fileName, fallbackMimeType) {
+  const extension = fileName.toLowerCase().match(/\.(woff2?|ttf|otf)$/)?.[1];
+  if (extension === "woff2") return "font/woff2";
+  if (extension === "woff") return "font/woff";
+  if (extension === "ttf") return "font/ttf";
+  if (extension === "otf") return "font/otf";
+  return fallbackMimeType;
+}
 
 // server/storage.ts
 function getForgeConfig() {
@@ -1089,7 +1097,7 @@ var siteRouter = router({
       const { mimeType, bytes } = decodeDataUrl(input.dataUrl);
       if (!isAllowedFont(input.fileName, mimeType)) throw new TRPCError3({ code: "BAD_REQUEST", message: "\u0E23\u0E2D\u0E07\u0E23\u0E31\u0E1A\u0E40\u0E09\u0E1E\u0E32\u0E30\u0E44\u0E1F\u0E25\u0E4C WOFF, WOFF2, TTF \u0E2B\u0E23\u0E37\u0E2D OTF" });
       if (bytes.byteLength > 25e5) throw new TRPCError3({ code: "PAYLOAD_TOO_LARGE", message: "\u0E1F\u0E2D\u0E19\u0E15\u0E4C\u0E40\u0E01\u0E34\u0E19 2.5MB \u0E0B\u0E36\u0E48\u0E07\u0E40\u0E01\u0E34\u0E19\u0E02\u0E19\u0E32\u0E14\u0E17\u0E35\u0E48 Vercel \u0E23\u0E2D\u0E07\u0E23\u0E31\u0E1A\u0E2A\u0E33\u0E2B\u0E23\u0E31\u0E1A\u0E01\u0E32\u0E23\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14\u0E41\u0E1A\u0E1A\u0E19\u0E35\u0E49" });
-      return uploadCustomFont(site.id, { originalName: input.fileName, mimeType, bytes });
+      return uploadCustomFont(site.id, { originalName: input.fileName, mimeType: fontMimeTypeFromFileName(input.fileName, mimeType), bytes });
     }),
     removeMedia: protectedProcedure.input(z2.object({ slug: slugSchema, id: z2.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const site = await requireOwnedSite(ctx.user.id, input.slug);

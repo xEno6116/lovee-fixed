@@ -17,7 +17,7 @@ import {
   updateSiteSettings,
   verifySitePin,
 } from "../db";
-import { decodeDataUrl, isAllowedFont, isAllowedMedia, isValidPin } from "../siteUtils";
+import { decodeDataUrl, fontMimeTypeFromFileName, isAllowedFont, isAllowedMedia, isValidPin } from "../siteUtils";
 import { protectedProcedure, router } from "../_core/trpc";
 
 const slugSchema = z.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
@@ -129,7 +129,7 @@ export const siteRouter = router({
         const { mimeType, bytes } = decodeDataUrl(input.dataUrl);
         if (!isAllowedFont(input.fileName, mimeType)) throw new TRPCError({ code: "BAD_REQUEST", message: "รองรับเฉพาะไฟล์ WOFF, WOFF2, TTF หรือ OTF" });
         if (bytes.byteLength > 2_500_000) throw new TRPCError({ code: "PAYLOAD_TOO_LARGE", message: "ฟอนต์เกิน 2.5MB ซึ่งเกินขนาดที่ Vercel รองรับสำหรับการอัปโหลดแบบนี้" });
-        return uploadCustomFont(site.id, { originalName: input.fileName, mimeType, bytes });
+        return uploadCustomFont(site.id, { originalName: input.fileName, mimeType: fontMimeTypeFromFileName(input.fileName, mimeType), bytes });
       }),
     removeMedia: protectedProcedure
       .input(z.object({ slug: slugSchema, id: z.number().int().positive() }))

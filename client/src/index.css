@@ -5,7 +5,8 @@
   .legacy-cd-disc { animation: none !important; }
 }
 
-.legacy-font-custom { font-family: 'AnniversaryCustom', 'Noto Sans Thai', system-ui, sans-serif; }
+.legacy-anniversary.legacy-font-custom,
+.legacy-anniversary.legacy-font-custom *:not(svg):not(path) { font-family: 'AnniversaryCustom', 'Noto Sans Thai', system-ui, sans-serif !important; }
 .legacy-anniversary, .legacy-anniversary .legacy-header h1, .legacy-anniversary .legacy-section h3, .legacy-anniversary .legacy-footer, .legacy-anniversary .legacy-glass-card p, .legacy-anniversary .legacy-welcome-title, .legacy-anniversary .legacy-welcome-message, .legacy-anniversary .legacy-story-list strong, .legacy-anniversary .legacy-story-list h4, .legacy-anniversary .legacy-story-list p, .legacy-anniversary .legacy-surprise p { color: #111 !important; }
 .legacy-cd-player { transform: translate(var(--legacy-player-x, 0px), var(--legacy-player-y, 0px)); }
 .legacy-cd-grab { cursor: grab; touch-action: none; }.legacy-cd-grab:active { cursor: grabbing; }

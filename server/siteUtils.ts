@@ -36,3 +36,13 @@ export function isAllowedFont(fileName: string, mimeType: string) {
   const extension = fileName.toLowerCase().match(/\.(woff2?|ttf|otf)$/)?.[1];
   return Boolean(extension) && (mimeType.startsWith("font/") || mimeType === "application/font-sfnt" || mimeType === "application/vnd.ms-fontobject" || mimeType === "application/octet-stream");
 }
+
+/** Browsers need a reliable content type for custom fonts; file pickers often report TTF/OTF as octet-stream. */
+export function fontMimeTypeFromFileName(fileName: string, fallbackMimeType: string) {
+  const extension = fileName.toLowerCase().match(/\.(woff2?|ttf|otf)$/)?.[1];
+  if (extension === "woff2") return "font/woff2";
+  if (extension === "woff") return "font/woff";
+  if (extension === "ttf") return "font/ttf";
+  if (extension === "otf") return "font/otf";
+  return fallbackMimeType;
+}

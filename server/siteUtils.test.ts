@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_PIN, decodeDataUrl, hashPin, isAllowedFont, isAllowedMedia, isValidPin, safeFileName } from "./siteUtils";
+import { DEFAULT_PIN, decodeDataUrl, fontMimeTypeFromFileName, hashPin, isAllowedFont, isAllowedMedia, isValidPin, safeFileName } from "./siteUtils";
 
 describe("site utilities", () => {
   it("accepts only a four-digit PIN and keeps the default PIN stable", () => {
@@ -31,6 +31,9 @@ describe("site utilities", () => {
     expect(isAllowedFont("memory.woff2", "font/woff2")).toBe(true);
     expect(isAllowedFont("memory.ttf", "application/octet-stream")).toBe(true);
     expect(isAllowedFont("memory.exe", "application/octet-stream")).toBe(false);
+    expect(fontMimeTypeFromFileName("memory.woff2", "application/octet-stream")).toBe("font/woff2");
+    expect(fontMimeTypeFromFileName("memory.ttf", "application/octet-stream")).toBe("font/ttf");
+    expect(fontMimeTypeFromFileName("memory.otf", "application/octet-stream")).toBe("font/otf");
   });
 
 });

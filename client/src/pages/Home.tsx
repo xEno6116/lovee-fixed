@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { OwnerLoginButton } from "@/components/OwnerLoginModal";
 import { trpc } from "@/lib/trpc";
+import { buildCustomFontFace } from "@/fontFace";
 
 type TimeParts = { days: number; hours: number; minutes: number; seconds: number };
 
@@ -85,11 +86,12 @@ export default function Home({ slug }: { slug: string }) {
   const visibleNotes = features.notes.filter((note) => isPublished(note.publishAt));
   const showSurprise = Boolean((features.surpriseTitle || features.surpriseMessage) && isPublished(features.surpriseAt));
   const nightMode = features.themeMode === "night" || (features.themeMode === "auto" && new Date().getHours() >= 19);
+  const customFontFace = buildCustomFontFace(features.customFontUrl);
   const playerStyle = { "--legacy-player-x": `${playerPosition.x}px`, "--legacy-player-y": `${playerPosition.y}px` } as CSSProperties & { "--legacy-player-x": string; "--legacy-player-y": string };
   const share = async () => { const data = { title: site.site.title, text: "เว็บไซต์ความทรงจำของเรา", url: window.location.href }; try { if (navigator.share) await navigator.share(data); else { await navigator.clipboard.writeText(data.url); window.alert("คัดลอกลิงก์แล้ว"); } } catch { /* User cancelled sharing. */ } };
 
-  return <div className={`legacy-anniversary min-h-screen legacy-bg-${features.backgroundStyle} ${features.customFontUrl ? "legacy-font-custom" : `legacy-font-${features.fontFamily}`} ${nightMode ? "legacy-night" : ""}`} style={themeStyle}>
-    {features.customFontUrl && <style>{`@font-face { font-family: 'AnniversaryCustom'; src: url('${features.customFontUrl}') format('woff2'); font-display: swap; }`}</style>}
+  return <div className={`legacy-anniversary min-h-screen legacy-bg-${features.backgroundStyle} ${customFontFace ? "legacy-font-custom" : `legacy-font-${features.fontFamily}`} ${nightMode ? "legacy-night" : ""}`} style={themeStyle}>
+    {customFontFace && <style data-custom-font>{customFontFace}</style>}
     <audio ref={audioRef} src={site.settings.musicUrl || undefined} loop onPause={() => setPlaying(false)} onWaiting={() => setPlaying(false)} onPlaying={() => setPlaying(true)} onError={() => setPlaying(false)} />
     {!unlocked && <section className="legacy-lock-screen">
       <div className="mb-10 text-center"><h2>{site.site.title}</h2></div>
