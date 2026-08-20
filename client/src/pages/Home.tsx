@@ -8,6 +8,7 @@ import { createFloatingHeart, type FloatingHeart } from "@/heartEffect";
 import { buildCustomFontFace } from "@/fontFace";
 import { getRevealContent } from "@/revealExperience";
 import { isReleasedAt, nextMemoryIndex } from "@/memoryExperience";
+import { getVisualTheme } from "@/themeGallery";
 
 type TimeParts = { days: number; hours: number; minutes: number; seconds: number };
 
@@ -103,13 +104,14 @@ export default function Home({ slug }: { slug: string }) {
   const activeNote = visibleNotes.length ? visibleNotes[noteIndex % visibleNotes.length] : null;
   const nightMode = features.themeMode === "night" || (features.themeMode === "auto" && new Date().getHours() >= 19);
   const customFontFace = buildCustomFontFace(features.customFontUrl);
+  const visualTheme = getVisualTheme(features.visualTheme);
   const revealContent = getRevealContent({ siteTitle: site.site.title, welcomeTitle: features.welcomeTitle, welcomeMessage: features.welcomeMessage, memoryMessage: site.settings.memoryMessage });
   const playerStyle = { "--legacy-player-x": `${playerPosition.x}px`, "--legacy-player-y": `${playerPosition.y}px` } as CSSProperties & { "--legacy-player-x": string; "--legacy-player-y": string };
   const share = async () => { const data = { title: site.site.title, text: "เว็บไซต์ความทรงจำของเรา", url: window.location.href }; try { if (navigator.share) await navigator.share(data); else { await navigator.clipboard.writeText(data.url); window.alert("คัดลอกลิงก์แล้ว"); } } catch { /* User cancelled sharing. */ } };
   const openMemory = (event: React.MouseEvent<HTMLButtonElement>) => { launchHeart(event); setRevealDismissed(true); };
   const showNextNote = () => { if (visibleNotes.length > 1) setNoteIndex((index) => nextMemoryIndex(index, visibleNotes.length)); };
 
-  return <div className={`legacy-anniversary min-h-screen legacy-bg-${features.backgroundStyle} ${customFontFace ? "legacy-font-custom" : `legacy-font-${features.fontFamily}`} ${nightMode ? "legacy-night" : ""}`} style={themeStyle}>
+  return <div className={`legacy-anniversary min-h-screen legacy-bg-${features.backgroundStyle} legacy-visual-${visualTheme.id} ${customFontFace ? "legacy-font-custom" : `legacy-font-${features.fontFamily}`} ${nightMode ? "legacy-night" : ""}`} style={themeStyle}>
     {customFontFace && <style data-custom-font>{customFontFace}</style>}
     <audio ref={audioRef} src={site.settings.musicUrl || undefined} loop onPause={() => setPlaying(false)} onWaiting={() => setPlaying(false)} onPlaying={() => setPlaying(true)} onError={() => setPlaying(false)} />
     {!unlocked && <section className="legacy-lock-screen">

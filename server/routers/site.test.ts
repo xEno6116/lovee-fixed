@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const ownedSite = { id: 9, ownerId: 1, slug: "main-memory", title: "เว็บไซต์ความทรงจำหลัก" };
-const features = { songLabel: "Our Song", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu" as const, customFontUrl: "", customFontName: "", backgroundStyle: "soft" as const, themeMode: "light" as const, hideVideos: false, hideGallery: false, hideMessage: false, surpriseTitle: "", surpriseMessage: "", surpriseAt: "", timeline: [], places: [], notes: [], ownerNote: "" };
+const features = { songLabel: "Our Song", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu" as const, customFontUrl: "", customFontName: "", backgroundStyle: "soft" as const, themeMode: "light" as const, visualTheme: "soft-love" as const, hideVideos: false, hideGallery: false, hideMessage: false, surpriseTitle: "", surpriseMessage: "", surpriseAt: "", timeline: [], places: [], notes: [], ownerNote: "" };
 const getOwnedSiteBySlug = vi.fn(async (ownerId: number, slug: string) => ownerId === 1 && slug === "main-memory" ? ownedSite : undefined);
 const getPrivateSiteData = vi.fn(async (ownerId: number, slug: string) => ownerId === 1 && slug === "main-memory" ? ({ site: ownedSite, settings: { id: 42, startDate: "2024-04-06", memoryMessage: "เทส", musicUrl: "", facebookUrl: "", instagramUrl: "", themeColor: "#ec4899" }, images: [], videos: [] }) : undefined);
 const getAdminSiteData = vi.fn(async (ownerId: number, slug: string) => ownerId === 1 && slug === "main-memory" ? ({ site: ownedSite, settings: { id: 42, siteId: 9, pinHash: "hash", startDate: "2024-04-06", memoryMessage: "เทส", musicUrl: "", facebookUrl: "", instagramUrl: "", themeColor: "#ec4899" }, assets: [] }) : undefined);

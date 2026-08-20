@@ -19,6 +19,7 @@ export type FeatureSettings = {
   customFontName: string;
   backgroundStyle: "soft" | "sunset" | "night" | "paper";
   themeMode: "light" | "night" | "auto";
+  visualTheme: "soft-love" | "minimal-white" | "midnight-date" | "film-diary" | "lavender-dream" | "sunset-memory";
   hideVideos: boolean;
   hideGallery: boolean;
   hideMessage: boolean;
@@ -32,7 +33,7 @@ export type FeatureSettings = {
 };
 
 const defaultFeatureSettings = (): FeatureSettings => ({
-  songLabel: "Our Song ❤️", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", customFontUrl: "", customFontName: "", backgroundStyle: "soft", themeMode: "light",
+  songLabel: "Our Song ❤️", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", customFontUrl: "", customFontName: "", backgroundStyle: "soft", themeMode: "light", visualTheme: "soft-love",
   hideVideos: false, hideGallery: false, hideMessage: false, surpriseTitle: "", surpriseMessage: "", surpriseAt: "", timeline: [], places: [], notes: [], ownerNote: "",
 });
 
