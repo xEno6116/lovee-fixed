@@ -178,16 +178,6 @@ function isAllowedFont(fileName, mimeType) {
   const extension = fileName.toLowerCase().match(/\.(woff2?|ttf|otf)$/)?.[1];
   return Boolean(extension) && (mimeType.startsWith("font/") || mimeType === "application/font-sfnt" || mimeType === "application/vnd.ms-fontobject" || mimeType === "application/octet-stream");
 }
-function isAllowedMp3Url(value) {
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "https:" && url.protocol !== "http:") return false;
-    const candidates = [url.pathname, ...Array.from(url.searchParams.values())];
-    return candidates.some((candidate) => /\.mp3(?:$|[&#?])/i.test(candidate));
-  } catch {
-    return false;
-  }
-}
 
 // server/storage.ts
 function getForgeConfig() {
@@ -695,13 +685,13 @@ var SDKServer = class {
         algorithms: ["HS256"]
       });
       const { openId, appId, name } = payload;
-      if (!isNonEmptyString(openId) || !isNonEmptyString(appId) || !isNonEmptyString(name)) {
+      if (!isNonEmptyString(openId) || !isNonEmptyString(name)) {
         console.warn("[Auth] Session payload missing required fields");
         return null;
       }
       return {
         openId,
-        appId,
+        appId: isNonEmptyString(appId) ? appId : "",
         name
       };
     } catch (error) {
@@ -992,7 +982,7 @@ import { z as z2 } from "zod";
 var slugSchema = z2.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "\u0E43\u0E0A\u0E49\u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23\u0E2D\u0E31\u0E07\u0E01\u0E24\u0E29 \u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 \u0E41\u0E25\u0E30\u0E02\u0E35\u0E14\u0E01\u0E25\u0E32\u0E07\u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19");
 var siteInput = z2.object({ slug: slugSchema });
 var optionalHttpUrl = z2.string().url().refine((value) => /^https?:\/\//i.test(value), "\u0E43\u0E0A\u0E49\u0E25\u0E34\u0E07\u0E01\u0E4C http \u0E2B\u0E23\u0E37\u0E2D https \u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19").or(z2.literal(""));
-var optionalMp3Url = z2.string().trim().max(2048).refine((value) => !value || isAllowedMp3Url(value), "\u0E43\u0E0A\u0E49\u0E25\u0E34\u0E07\u0E01\u0E4C MP3 \u0E42\u0E14\u0E22\u0E15\u0E23\u0E07\u0E17\u0E35\u0E48\u0E02\u0E36\u0E49\u0E19\u0E15\u0E49\u0E19\u0E14\u0E49\u0E27\u0E22 http:// \u0E2B\u0E23\u0E37\u0E2D https:// \u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19");
+var optionalStoredMusicUrl = z2.string().trim().max(2048).refine((value) => !value || /^\/manus-storage\/[a-zA-Z0-9._/-]+$/.test(value), "\u0E40\u0E1E\u0E25\u0E07\u0E15\u0E49\u0E2D\u0E07\u0E21\u0E32\u0E08\u0E32\u0E01\u0E44\u0E1F\u0E25\u0E4C\u0E17\u0E35\u0E48\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14\u0E43\u0E19\u0E23\u0E30\u0E1A\u0E1A\u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19");
 var timelineEntryInput = z2.object({ id: z2.string().min(1).max(80), title: z2.string().trim().min(1).max(120), date: z2.string().max(32), description: z2.string().trim().max(1e3) });
 var placeEntryInput = z2.object({ id: z2.string().min(1).max(80), name: z2.string().trim().min(1).max(120), mapUrl: optionalHttpUrl });
 var storyNoteInput = z2.object({ id: z2.string().min(1).max(80), title: z2.string().trim().min(1).max(120), body: z2.string().trim().max(3e3), publishAt: z2.string().max(32) });
@@ -1020,7 +1010,7 @@ var settingsInput = z2.object({
   slug: slugSchema,
   facebookUrl: optionalHttpUrl,
   instagramUrl: optionalHttpUrl,
-  musicUrl: optionalMp3Url,
+  musicUrl: optionalStoredMusicUrl,
   themeColor: z2.string().regex(/^#[0-9a-fA-F]{6}$/, "\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E23\u0E2B\u0E31\u0E2A\u0E2A\u0E35\u0E41\u0E1A\u0E1A #RRGGBB"),
   pin: z2.string().regex(/^\d{4}$/).optional(),
   features: featureInput

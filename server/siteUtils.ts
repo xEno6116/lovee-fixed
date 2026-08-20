@@ -36,19 +36,3 @@ export function isAllowedFont(fileName: string, mimeType: string) {
   const extension = fileName.toLowerCase().match(/\.(woff2?|ttf|otf)$/)?.[1];
   return Boolean(extension) && (mimeType.startsWith("font/") || mimeType === "application/font-sfnt" || mimeType === "application/vnd.ms-fontobject" || mimeType === "application/octet-stream");
 }
-
-/**
- * Remote audio is played by the visitor's browser only; the server never fetches
- * the supplied URL. Requiring a direct MP3 path/query avoids unsafe schemes and
- * misleading generic links such as an HTML sharing page.
- */
-export function isAllowedMp3Url(value: string) {
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "https:" && url.protocol !== "http:") return false;
-    const candidates = [url.pathname, ...Array.from(url.searchParams.values())];
-    return candidates.some((candidate) => /\.mp3(?:$|[&#?])/i.test(candidate));
-  } catch {
-    return false;
-  }
-}

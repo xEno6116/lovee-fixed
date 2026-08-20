@@ -17,13 +17,13 @@ import {
   updateSiteSettings,
   verifySitePin,
 } from "../db";
-import { decodeDataUrl, isAllowedFont, isAllowedMedia, isAllowedMp3Url, isValidPin } from "../siteUtils";
+import { decodeDataUrl, isAllowedFont, isAllowedMedia, isValidPin } from "../siteUtils";
 import { protectedProcedure, router } from "../_core/trpc";
 
 const slugSchema = z.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
 const siteInput = z.object({ slug: slugSchema });
 const optionalHttpUrl = z.string().url().refine((value) => /^https?:\/\//i.test(value), "ใช้ลิงก์ http หรือ https เท่านั้น").or(z.literal(""));
-const optionalMp3Url = z.string().trim().max(2048).refine((value) => !value || isAllowedMp3Url(value), "ใช้ลิงก์ MP3 โดยตรงที่ขึ้นต้นด้วย http:// หรือ https:// เท่านั้น");
+const optionalStoredMusicUrl = z.string().trim().max(2048).refine((value) => !value || /^\/manus-storage\/[a-zA-Z0-9._/-]+$/.test(value), "เพลงต้องมาจากไฟล์ที่อัปโหลดในระบบเท่านั้น");
 const timelineEntryInput = z.object({ id: z.string().min(1).max(80), title: z.string().trim().min(1).max(120), date: z.string().max(32), description: z.string().trim().max(1000) });
 const placeEntryInput = z.object({ id: z.string().min(1).max(80), name: z.string().trim().min(1).max(120), mapUrl: optionalHttpUrl });
 const storyNoteInput = z.object({ id: z.string().min(1).max(80), title: z.string().trim().min(1).max(120), body: z.string().trim().max(3000), publishAt: z.string().max(32) });
@@ -37,7 +37,7 @@ const settingsInput = z.object({
   slug: slugSchema,
   facebookUrl: optionalHttpUrl,
   instagramUrl: optionalHttpUrl,
-  musicUrl: optionalMp3Url,
+  musicUrl: optionalStoredMusicUrl,
   themeColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "เลือกรหัสสีแบบ #RRGGBB"),
   pin: z.string().regex(/^\d{4}$/).optional(),
   features: featureInput,
