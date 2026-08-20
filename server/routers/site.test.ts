@@ -17,6 +17,7 @@ const getVisitorSiteId = vi.fn(async () => 9);
 const createVisitorAccessToken = vi.fn(async () => "signed-visitor-token");
 const createLetterSubmissionToken = vi.fn(async () => "signed-letter-token");
 const hasSubmittedLetter = vi.fn(async () => false);
+const updateImageCaption = vi.fn(async (_siteId: number, _id: number, caption: string) => ({ success: true, caption }));
 
 vi.mock("../db", () => ({
   createMediaAsset: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock("../db", () => ({
   setMusicUrl: vi.fn(),
   uploadCustomFont: vi.fn(),
   updateMediaOrder: vi.fn(),
+  updateImageCaption,
   updateSiteSettings,
   verifySitePin,
 }));
@@ -123,6 +125,14 @@ describe("multi-site router", () => {
     const caller = siteRouter.createCaller({ user: owner } as never);
     await expect(caller.admin.saveSettings({ slug: "main-memory", facebookUrl: "", instagramUrl: "", musicUrl: "/manus-storage/sites/9/audio/our-song.mp3", themeColor: "#ec4899", features })).resolves.toMatchObject({ id: 42 });
     await expect(caller.admin.saveSettings({ slug: "main-memory", facebookUrl: "", instagramUrl: "", musicUrl: "https://cdn.example.com/song.mp3", themeColor: "#ec4899", features })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("allows only the site owner to save a caption for an uploaded image", async () => {
+    const caller = siteRouter.createCaller({ user: owner } as never);
+    await expect(caller.admin.updateImageCaption({ slug: "main-memory", id: 17, caption: "วันที่เราไปเที่ยวด้วยกัน" })).resolves.toEqual({ success: true, caption: "วันที่เราไปเที่ยวด้วยกัน" });
+    expect(updateImageCaption).toHaveBeenCalledWith(9, 17, "วันที่เราไปเที่ยวด้วยกัน");
+    const otherCaller = siteRouter.createCaller({ user: otherOwner } as never);
+    await expect(otherCaller.admin.updateImageCaption({ slug: "main-memory", id: 17, caption: "ไม่ควรบันทึก" })).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
   it("deletes only a site belonging to the authenticated owner", async () => {

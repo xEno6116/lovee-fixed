@@ -17,6 +17,7 @@ import {
   uploadCustomFont,
   listSitesForOwner,
   setMusicUrl,
+  updateImageCaption,
   updateMediaOrder,
   updateSiteSettings,
   verifySitePin,
@@ -215,6 +216,14 @@ export const siteRouter = router({
       .mutation(async ({ ctx, input }) => {
         const site = await requireOwnedSite(ctx.user.id, input.slug);
         return updateMediaOrder(site.id, input.id, input.sortOrder);
+      }),
+    updateImageCaption: protectedProcedure
+      .input(z.object({ slug: slugSchema, id: z.number().int().positive(), caption: z.string().trim().max(1_200, "ข้อความกำกับรูปยาวเกินไป") }))
+      .mutation(async ({ ctx, input }) => {
+        const site = await requireOwnedSite(ctx.user.id, input.slug);
+        const result = await updateImageCaption(site.id, input.id, input.caption);
+        if (!result.success) throw new TRPCError({ code: "NOT_FOUND", message: "ไม่พบรูปภาพที่ต้องการแก้ไข" });
+        return result;
       }),
   }),
 });

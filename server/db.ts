@@ -69,6 +69,7 @@ type StoredAsset = {
   originalName: string;
   mimeType: string;
   sortOrder: number;
+  caption?: string;
   byteLength?: number;
   createdAt: string;
 };
@@ -489,5 +490,16 @@ export async function updateMediaOrder(siteId: number, id: number, sortOrder: nu
     asset.sortOrder = sortOrder;
     site.updatedAt = new Date().toISOString();
     return { data: repository, result: { success: true } };
+  });
+}
+
+export async function updateImageCaption(siteId: number, id: number, caption: string) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update image caption ${id}`, (repository) => {
+    const site = getSite(repository, siteId);
+    const asset = site?.assets.find((item) => item.id === id && item.kind === "image");
+    if (!site || !asset) return { data: repository, result: { success: false, caption: "" } };
+    asset.caption = caption.trim();
+    site.updatedAt = new Date().toISOString();
+    return { data: repository, result: { success: true, caption: asset.caption } };
   });
 }

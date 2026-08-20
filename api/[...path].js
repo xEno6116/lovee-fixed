@@ -594,6 +594,16 @@ async function updateMediaOrder(siteId, id, sortOrder) {
     return { data: repository, result: { success: true } };
   });
 }
+async function updateImageCaption(siteId, id, caption) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update image caption ${id}`, (repository) => {
+    const site = getSite(repository, siteId);
+    const asset = site?.assets.find((item) => item.id === id && item.kind === "image");
+    if (!site || !asset) return { data: repository, result: { success: false, caption: "" } };
+    asset.caption = caption.trim();
+    site.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    return { data: repository, result: { success: true, caption: asset.caption } };
+  });
+}
 
 // shared/_core/errors.ts
 var HttpError = class extends Error {
@@ -1289,6 +1299,12 @@ var siteRouter = router({
     reorderMedia: protectedProcedure.input(z2.object({ slug: slugSchema, id: z2.number().int().positive(), sortOrder: z2.number().int().min(0) })).mutation(async ({ ctx, input }) => {
       const site = await requireOwnedSite(ctx.user.id, input.slug);
       return updateMediaOrder(site.id, input.id, input.sortOrder);
+    }),
+    updateImageCaption: protectedProcedure.input(z2.object({ slug: slugSchema, id: z2.number().int().positive(), caption: z2.string().trim().max(1200, "\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E01\u0E33\u0E01\u0E31\u0E1A\u0E23\u0E39\u0E1B\u0E22\u0E32\u0E27\u0E40\u0E01\u0E34\u0E19\u0E44\u0E1B") })).mutation(async ({ ctx, input }) => {
+      const site = await requireOwnedSite(ctx.user.id, input.slug);
+      const result = await updateImageCaption(site.id, input.id, input.caption);
+      if (!result.success) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E23\u0E39\u0E1B\u0E20\u0E32\u0E1E\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E41\u0E01\u0E49\u0E44\u0E02" });
+      return result;
     })
   })
 });
