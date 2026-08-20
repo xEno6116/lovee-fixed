@@ -2,7 +2,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
-import { isOwnerPasscodeValid, issueOwnerSession } from "./_core/ownerAuth";
+import { issueOwnerSession, validateOwnerPasscodeAttempt } from "./_core/ownerAuth";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { siteRouter } from "./routers/site";
@@ -24,8 +24,12 @@ export const appRouter = router({
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     login: publicProcedure.input(ownerPasscodeInput).mutation(async ({ ctx, input }) => {
-      if (!isOwnerPasscodeValid(input.passcode)) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "รหัสตัวเลขไม่ถูกต้อง" });
+      const attempt = await validateOwnerPasscodeAttempt(ctx.req, input.passcode);
+      if (!attempt.allowed) {
+        throw new TRPCError({
+          code: attempt.locked ? "TOO_MANY_REQUESTS" : "UNAUTHORIZED",
+          message: attempt.locked ? `ลองรหัสผิดหลายครั้ง กรุณาลองใหม่ใน ${Math.max(1, Math.ceil(attempt.retryAfterSeconds / 60))} นาที` : "รหัสตัวเลขไม่ถูกต้อง",
+        });
       }
       try {
         return await issueOwnerSession(ctx.req, ctx.res);

@@ -325,6 +325,32 @@ function sortAssets(assets) {
     (left, right) => left.kind.localeCompare(right.kind) || left.sortOrder - right.sortOrder || left.id - right.id
   );
 }
+function utcDateKey(date = /* @__PURE__ */ new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+function getDailyAnalytics(site, date = utcDateKey()) {
+  const entries = site.dailyAnalytics ?? (site.dailyAnalytics = []);
+  let entry = entries.find((item) => item.date === date);
+  if (!entry) {
+    entry = { date, views: 0, letterResponses: 0 };
+    entries.push(entry);
+  }
+  site.dailyAnalytics = entries.sort((left, right) => right.date.localeCompare(left.date)).slice(0, 120);
+  return entry;
+}
+function appendSiteActivity(site, kind, label, at = (/* @__PURE__ */ new Date()).toISOString()) {
+  const activity = { id: nanoid(12), at, kind, label };
+  site.activityLog = [activity, ...site.activityLog ?? []].slice(0, 80);
+  return activity;
+}
+function analyticsWindow(site, days = 7) {
+  const byDate = new Map((site.dailyAnalytics ?? []).map((item) => [item.date, item]));
+  return Array.from({ length: days }, (_, index) => {
+    const date = utcDateKey(new Date(Date.now() - (days - 1 - index) * 864e5));
+    const item = byDate.get(date);
+    return { date, views: item?.views ?? 0, letterResponses: item?.letterResponses ?? 0 };
+  });
+}
 function toApplicationUser(user) {
   return {
     ...user,
@@ -372,6 +398,35 @@ async function listSitesForOwner(ownerId) {
   const { data } = await readRepository();
   return data.sites.filter((site) => site.ownerId === ownerId).sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || right.id - left.id).map(toClientSite);
 }
+async function getDashboardOverviewForOwner(ownerId) {
+  const { data } = await readRepository();
+  const sites = data.sites.filter((site) => site.ownerId === ownerId);
+  const dates = Array.from({ length: 7 }, (_, index) => utcDateKey(new Date(Date.now() - (6 - index) * 864e5)));
+  const totalsByDate = new Map(dates.map((date) => [date, { date, views: 0, letterResponses: 0 }]));
+  const activities = [];
+  let totalViews = 0;
+  let totalLetters = 0;
+  let storageBytes = 0;
+  for (const site of sites) {
+    totalViews += site.viewCount ?? 0;
+    totalLetters += site.letterResponseCount ?? 0;
+    storageBytes += site.assets.reduce((sum, asset) => sum + (asset.byteLength ?? 0), 0);
+    for (const item of site.dailyAnalytics ?? []) {
+      const aggregate = totalsByDate.get(item.date);
+      if (aggregate) {
+        aggregate.views += item.views;
+        aggregate.letterResponses += item.letterResponses;
+      }
+    }
+    activities.push(...(site.activityLog ?? []).map((item) => ({ ...item, siteSlug: site.slug, siteTitle: site.title })));
+  }
+  return {
+    totals: { sites: sites.length, views: totalViews, letterResponses: totalLetters, storageBytes, pausedSites: sites.filter((site) => site.isPaused).length },
+    trend: dates.map((date) => totalsByDate.get(date)),
+    recentActivity: activities.sort((left, right) => right.at.localeCompare(left.at)).slice(0, 12),
+    sites: sites.map((site) => ({ ...toClientSite(site), viewCount: site.viewCount ?? 0, letterResponseCount: site.letterResponseCount ?? 0, storageBytes: site.assets.reduce((sum, asset) => sum + (asset.byteLength ?? 0), 0), isPaused: Boolean(site.isPaused), lastViewedAt: site.lastViewedAt ?? "" }))
+  };
+}
 async function getOwnedSiteBySlug(ownerId, slug) {
   const { data } = await readRepository();
   return data.sites.find((site) => site.ownerId === ownerId && site.slug === slug);
@@ -391,6 +446,11 @@ async function createSiteForOwner(ownerId, input) {
       createdAt: now,
       updatedAt: now,
       viewCount: 0,
+      letterResponseCount: 0,
+      isPaused: false,
+      pausedMessage: "\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49\u0E1E\u0E31\u0E01\u0E01\u0E32\u0E23\u0E41\u0E2A\u0E14\u0E07\u0E1C\u0E25\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27",
+      dailyAnalytics: [],
+      activityLog: [],
       settings: {
         id: repository.nextSettingsId++,
         siteId,
@@ -408,6 +468,7 @@ async function createSiteForOwner(ownerId, input) {
       },
       assets: []
     };
+    appendSiteActivity(site, "created", "\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E43\u0E2B\u0E21\u0E48", now);
     repository.sites.push(site);
     return { data: repository, result: toClientSite(site) };
   });
@@ -418,6 +479,98 @@ async function deleteSiteForOwner(ownerId, slug) {
     if (index === -1) return { data: repository, result: { success: false } };
     repository.sites.splice(index, 1);
     return { data: repository, result: { success: true } };
+  });
+}
+async function cloneSiteForOwner(ownerId, input) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: clone ${input.sourceSlug} to ${input.slug}`, (repository) => {
+    const source = repository.sites.find((site) => site.ownerId === ownerId && site.slug === input.sourceSlug);
+    if (!source) throw new Error("\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E15\u0E49\u0E19\u0E09\u0E1A\u0E31\u0E1A \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E42\u0E04\u0E25\u0E19");
+    if (repository.sites.some((site) => site.slug === input.slug)) throw new Error("duplicate site slug");
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const siteId = repository.nextSiteId++;
+    const settings = {
+      ...structuredClone(source.settings),
+      id: repository.nextSettingsId++,
+      siteId,
+      pinHash: hashPin(DEFAULT_PIN),
+      revisionLog: [{ at: now, label: `\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E08\u0E32\u0E01\u0E2A\u0E33\u0E40\u0E19\u0E32 ${source.title}` }],
+      createdAt: now,
+      updatedAt: now
+    };
+    const assets = source.assets.map((asset) => ({ ...structuredClone(asset), id: repository.nextAssetId++, siteId, createdAt: now }));
+    const cloned = {
+      id: siteId,
+      ownerId,
+      slug: input.slug,
+      title: input.title,
+      createdAt: now,
+      updatedAt: now,
+      viewCount: 0,
+      letterResponseCount: 0,
+      isPaused: false,
+      pausedMessage: "\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49\u0E1E\u0E31\u0E01\u0E01\u0E32\u0E23\u0E41\u0E2A\u0E14\u0E07\u0E1C\u0E25\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27",
+      dailyAnalytics: [],
+      activityLog: [],
+      settings,
+      assets
+    };
+    appendSiteActivity(cloned, "clone", `\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E2A\u0E33\u0E40\u0E19\u0E32\u0E08\u0E32\u0E01 ${source.title}`, now);
+    appendSiteActivity(source, "clone", `\u0E2A\u0E23\u0E49\u0E32\u0E07\u0E2A\u0E33\u0E40\u0E19\u0E32\u0E43\u0E2B\u0E21\u0E48\u0E0A\u0E37\u0E48\u0E2D ${input.title}`, now);
+    repository.sites.push(cloned);
+    return { data: repository, result: toClientSite(cloned) };
+  });
+}
+async function setSiteAvailabilityForOwner(ownerId, slug, input) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: availability ${slug}`, (repository) => {
+    const site = repository.sites.find((item) => item.ownerId === ownerId && item.slug === slug);
+    if (!site) return { data: repository, result: { success: false, isPaused: false, pausedMessage: "" } };
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    site.isPaused = input.isPaused;
+    site.pausedMessage = input.pausedMessage.trim() || "\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49\u0E1E\u0E31\u0E01\u0E01\u0E32\u0E23\u0E41\u0E2A\u0E14\u0E07\u0E1C\u0E25\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27";
+    site.updatedAt = now;
+    appendSiteActivity(site, "availability", input.isPaused ? "\u0E1E\u0E31\u0E01\u0E01\u0E32\u0E23\u0E41\u0E2A\u0E14\u0E07\u0E1C\u0E25\u0E2B\u0E19\u0E49\u0E32\u0E1A\u0E49\u0E32\u0E19" : "\u0E40\u0E1B\u0E34\u0E14\u0E01\u0E32\u0E23\u0E41\u0E2A\u0E14\u0E07\u0E1C\u0E25\u0E2B\u0E19\u0E49\u0E32\u0E1A\u0E49\u0E32\u0E19", now);
+    return { data: repository, result: { success: true, isPaused: site.isPaused, pausedMessage: site.pausedMessage } };
+  });
+}
+async function createSiteBackupForOwner(ownerId, slug) {
+  const site = await getOwnedSiteBySlug(ownerId, slug);
+  if (!site) return void 0;
+  const { id: _settingsId, siteId: _settingsSiteId, pinHash: _pinHash, createdAt: _settingsCreatedAt, updatedAt: _settingsUpdatedAt, ...settings } = structuredClone(site.settings);
+  return {
+    version: 2,
+    exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    site: { title: site.title, slug: site.slug },
+    settings,
+    assets: sortAssets(site.assets).map(({ id: _id, siteId: _siteId, storageKey: _storageKey, createdAt: _createdAt, ...asset }) => asset)
+  };
+}
+async function restoreSiteBackupForOwner(ownerId, slug, backup) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: restore ${slug}`, (repository) => {
+    const site = repository.sites.find((item) => item.ownerId === ownerId && item.slug === slug);
+    if (!site) return { data: repository, result: { success: false, restoredAssets: 0 } };
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const originalPinHash = site.settings.pinHash;
+    site.settings = {
+      ...site.settings,
+      ...structuredClone(backup.settings),
+      id: site.settings.id,
+      siteId: site.id,
+      pinHash: originalPinHash,
+      revisionLog: [{ at: now, label: "\u0E01\u0E39\u0E49\u0E04\u0E37\u0E19\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E08\u0E32\u0E01\u0E44\u0E1F\u0E25\u0E4C\u0E2A\u0E33\u0E23\u0E2D\u0E07" }, ...site.settings.revisionLog ?? []].slice(0, 20),
+      createdAt: site.settings.createdAt,
+      updatedAt: now
+    };
+    const previousStorageByUrl = new Map(site.assets.map((asset) => [asset.url, asset.storageKey]));
+    site.assets = backup.assets.map((asset) => ({
+      ...structuredClone(asset),
+      id: repository.nextAssetId++,
+      siteId: site.id,
+      storageKey: previousStorageByUrl.get(asset.url) ?? "",
+      createdAt: now
+    }));
+    site.updatedAt = now;
+    appendSiteActivity(site, "restore", "\u0E01\u0E39\u0E49\u0E04\u0E37\u0E19\u0E02\u0E49\u0E2D\u0E21\u0E39\u0E25\u0E08\u0E32\u0E01\u0E44\u0E1F\u0E25\u0E4C\u0E2A\u0E33\u0E23\u0E2D\u0E07", now);
+    return { data: repository, result: { success: true, restoredAssets: site.assets.length } };
   });
 }
 async function getSiteSettings(siteId) {
@@ -454,6 +607,16 @@ async function getVisitorSiteIdBySlug(slug) {
   const { data } = await readRepository();
   return data.sites.find((site) => site.slug === slug)?.id;
 }
+async function getPublicSiteStatus(slug) {
+  const { data } = await readRepository();
+  const site = data.sites.find((item) => item.slug === slug);
+  if (!site) return void 0;
+  return {
+    siteId: site.id,
+    isPaused: Boolean(site.isPaused),
+    pausedMessage: site.pausedMessage?.trim() || "\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49\u0E1E\u0E31\u0E01\u0E01\u0E32\u0E23\u0E41\u0E2A\u0E14\u0E07\u0E1C\u0E25\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27"
+  };
+}
 async function getVisitorSiteData(siteId, slug) {
   const { data } = await readRepository();
   const site = data.sites.find((item) => item.id === siteId && item.slug === slug);
@@ -484,7 +647,12 @@ async function getAdminSiteData(ownerId, slug) {
     assets: sortAssets(site.assets).map(toClientAsset),
     storageBytes: site.assets.reduce((sum, asset) => sum + (asset.byteLength ?? 0), 0),
     viewCount: site.viewCount ?? 0,
-    lastViewedAt: site.lastViewedAt ?? ""
+    lastViewedAt: site.lastViewedAt ?? "",
+    letterResponseCount: site.letterResponseCount ?? 0,
+    isPaused: Boolean(site.isPaused),
+    pausedMessage: site.pausedMessage ?? "\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49\u0E1E\u0E31\u0E01\u0E01\u0E32\u0E23\u0E41\u0E2A\u0E14\u0E07\u0E1C\u0E25\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27",
+    analytics: analyticsWindow(site, 30),
+    activityLog: (site.activityLog ?? []).slice(0, 30)
   };
 }
 async function recordSiteView(siteId) {
@@ -493,7 +661,18 @@ async function recordSiteView(siteId) {
     if (!site) return { data: repository, result: { success: false, views: 0 } };
     site.viewCount = (site.viewCount ?? 0) + 1;
     site.lastViewedAt = (/* @__PURE__ */ new Date()).toISOString();
+    getDailyAnalytics(site).views += 1;
     return { data: repository, result: { success: true, views: site.viewCount } };
+  });
+}
+async function recordSiteLetterResponse(siteId) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: record letter ${siteId}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) return { data: repository, result: { success: false } };
+    site.letterResponseCount = (site.letterResponseCount ?? 0) + 1;
+    getDailyAnalytics(site).letterResponses += 1;
+    appendSiteActivity(site, "security", "\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A\u0E04\u0E33\u0E15\u0E2D\u0E1A\u0E08\u0E14\u0E2B\u0E21\u0E32\u0E22\u0E08\u0E32\u0E01\u0E1C\u0E39\u0E49\u0E40\u0E22\u0E35\u0E48\u0E22\u0E21\u0E0A\u0E21");
+    return { data: repository, result: { success: true } };
   });
 }
 async function verifySitePin(siteId, pin) {
@@ -517,6 +696,7 @@ async function updateSiteSettings(siteId, input) {
       updatedAt: now
     };
     site.updatedAt = now;
+    appendSiteActivity(site, "settings", input.pin ? "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E01\u0E32\u0E23\u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32\u0E41\u0E25\u0E30\u0E40\u0E1B\u0E25\u0E35\u0E48\u0E22\u0E19 PIN \u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C" : "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E01\u0E32\u0E23\u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C", now);
     return { data: repository, result: toClientSettings(site.settings) };
   });
 }
@@ -531,6 +711,7 @@ async function uploadCustomFont(siteId, input) {
     site.settings.revisionLog = [{ at: now, label: "\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14\u0E1F\u0E2D\u0E19\u0E15\u0E4C\u0E2A\u0E48\u0E27\u0E19\u0E15\u0E31\u0E27" }, ...site.settings.revisionLog ?? []].slice(0, 20);
     site.settings.updatedAt = now;
     site.updatedAt = now;
+    appendSiteActivity(site, "media", "\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14\u0E1F\u0E2D\u0E19\u0E15\u0E4C\u0E2A\u0E48\u0E27\u0E19\u0E15\u0E31\u0E27", now);
     return { data: repository, result: { url: uploaded.url, name: input.originalName } };
   });
 }
@@ -542,6 +723,7 @@ async function setMusicUrl(siteId, musicUrl) {
     site.settings.musicUrl = musicUrl;
     site.settings.updatedAt = now;
     site.updatedAt = now;
+    appendSiteActivity(site, "media", "\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u0E40\u0E1E\u0E25\u0E07\u0E1E\u0E37\u0E49\u0E19\u0E2B\u0E25\u0E31\u0E07", now);
     return { data: repository, result: void 0 };
   });
 }
@@ -567,6 +749,7 @@ async function createMediaAsset(siteId, input) {
     };
     site.assets.push(created);
     site.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    appendSiteActivity(site, "media", `\u0E2D\u0E31\u0E1B\u0E42\u0E2B\u0E25\u0E14${input.kind === "image" ? "\u0E23\u0E39\u0E1B\u0E20\u0E32\u0E1E" : input.kind === "video" ? "\u0E27\u0E34\u0E14\u0E35\u0E42\u0E2D" : "\u0E40\u0E1E\u0E25\u0E07"}`);
     return { data: repository, result: toClientAsset(created) };
   });
 }
@@ -582,7 +765,26 @@ async function deleteMediaAsset(siteId, id) {
     }
     site.assets.splice(assetIndex, 1);
     site.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    appendSiteActivity(site, "media", "\u0E25\u0E1A\u0E44\u0E1F\u0E25\u0E4C\u0E2A\u0E37\u0E48\u0E2D");
     return { data: repository, result: { success: true } };
+  });
+}
+async function deleteMediaAssets(siteId, ids) {
+  const uniqueIds = Array.from(new Set(ids));
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: bulk remove media ${siteId}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) return { data: repository, result: { success: false, removed: 0 } };
+    const selected = site.assets.filter((asset) => uniqueIds.includes(asset.id));
+    if (!selected.length) return { data: repository, result: { success: true, removed: 0 } };
+    const removedUrls = new Set(selected.map((asset) => asset.url));
+    site.assets = site.assets.filter((asset) => !uniqueIds.includes(asset.id));
+    if (removedUrls.has(site.settings.musicUrl)) {
+      site.settings.musicUrl = "";
+      site.settings.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    }
+    site.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    appendSiteActivity(site, "media", `\u0E25\u0E1A\u0E44\u0E1F\u0E25\u0E4C\u0E2A\u0E37\u0E48\u0E2D ${selected.length} \u0E23\u0E32\u0E22\u0E01\u0E32\u0E23`);
+    return { data: repository, result: { success: true, removed: selected.length } };
   });
 }
 async function updateMediaOrder(siteId, id, sortOrder) {
@@ -592,6 +794,7 @@ async function updateMediaOrder(siteId, id, sortOrder) {
     if (!site || !asset) return { data: repository, result: { success: false } };
     asset.sortOrder = sortOrder;
     site.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    appendSiteActivity(site, "media", "\u0E08\u0E31\u0E14\u0E40\u0E23\u0E35\u0E22\u0E07\u0E2A\u0E37\u0E48\u0E2D\u0E43\u0E2B\u0E21\u0E48");
     return { data: repository, result: { success: true } };
   });
 }
@@ -602,6 +805,7 @@ async function updateImageCaption(siteId, id, caption) {
     if (!site || !asset) return { data: repository, result: { success: false, caption: "" } };
     asset.caption = caption.trim();
     site.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    appendSiteActivity(site, "settings", "\u0E1A\u0E31\u0E19\u0E17\u0E36\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E01\u0E33\u0E01\u0E31\u0E1A\u0E23\u0E39\u0E1B\u0E20\u0E32\u0E1E");
     return { data: repository, result: { success: true, caption: asset.caption } };
   });
 }
@@ -863,6 +1067,68 @@ function buildCronUser(userInfo) {
 }
 var sdk = new SDKServer();
 
+// server/adminSecurity.ts
+import { createHash as createHash2 } from "crypto";
+var SECURITY_DATA_PATH = "data/security.json";
+var LOGIN_WINDOW_MS = 15 * 60 * 1e3;
+var LOGIN_LOCK_MS = 15 * 60 * 1e3;
+var MAX_FAILED_ATTEMPTS = 5;
+function emptySecurityRepository() {
+  return { version: 1, loginRecords: {}, events: [] };
+}
+function requestFingerprint(req) {
+  const forwarded = req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? req.ip ?? "unknown";
+  const agent = req.header("user-agent") ?? "unknown";
+  return createHash2("sha256").update(`loveoffice-owner-login:${forwarded}:${agent}`).digest("hex").slice(0, 24);
+}
+function pushEvent(repository, status, now) {
+  repository.events = [{ at: new Date(now).toISOString(), status }, ...repository.events].slice(0, 80);
+}
+function pruneRecord(record, now) {
+  record.failedAt = record.failedAt.filter((at) => at > now - LOGIN_WINDOW_MS);
+  if (record.lockedUntil && record.lockedUntil <= now) delete record.lockedUntil;
+}
+async function recordOwnerLoginAttempt(req, passcodeValid) {
+  const fingerprint = requestFingerprint(req);
+  return updateJson(SECURITY_DATA_PATH, emptySecurityRepository, "loveoffice: owner login security event", (repository) => {
+    const now = Date.now();
+    const record = repository.loginRecords[fingerprint] ?? { failedAt: [] };
+    pruneRecord(record, now);
+    if (record.lockedUntil && record.lockedUntil > now) {
+      repository.loginRecords[fingerprint] = record;
+      pushEvent(repository, "blocked", now);
+      return { data: repository, result: { allowed: false, locked: true, retryAfterSeconds: Math.ceil((record.lockedUntil - now) / 1e3) } };
+    }
+    if (passcodeValid) {
+      delete repository.loginRecords[fingerprint];
+      pushEvent(repository, "success", now);
+      return { data: repository, result: { allowed: true, locked: false, retryAfterSeconds: 0 } };
+    }
+    record.failedAt.push(now);
+    if (record.failedAt.length >= MAX_FAILED_ATTEMPTS) record.lockedUntil = now + LOGIN_LOCK_MS;
+    repository.loginRecords[fingerprint] = record;
+    pushEvent(repository, "failed", now);
+    return {
+      data: repository,
+      result: {
+        allowed: false,
+        locked: Boolean(record.lockedUntil),
+        retryAfterSeconds: record.lockedUntil ? Math.ceil((record.lockedUntil - now) / 1e3) : 0
+      }
+    };
+  });
+}
+async function getOwnerSecurityOverview() {
+  const { data } = await readJson(SECURITY_DATA_PATH, emptySecurityRepository);
+  const now = Date.now();
+  const activeLocks = Object.values(data.loginRecords).filter((record) => (record.lockedUntil ?? 0) > now).length;
+  return {
+    activeLocks,
+    policy: { maxFailedAttempts: MAX_FAILED_ATTEMPTS, lockMinutes: LOGIN_LOCK_MS / 6e4, windowMinutes: LOGIN_WINDOW_MS / 6e4 },
+    recentEvents: data.events.slice(0, 12)
+  };
+}
+
 // server/_core/ownerAuth.ts
 var OWNER_SESSION_MS = 7 * 24 * 60 * 60 * 1e3;
 function isOwnerPasscodeValid(passcode) {
@@ -880,11 +1146,16 @@ async function issueOwnerSession(req, res) {
   res.cookie(COOKIE_NAME, sessionToken, { ...getSessionCookieOptions(req), maxAge: OWNER_SESSION_MS });
   return { success: true };
 }
+async function validateOwnerPasscodeAttempt(req, passcode) {
+  return recordOwnerLoginAttempt(req, isOwnerPasscodeValid(passcode));
+}
 function registerOwnerPasscodeAuthRoutes(app) {
   app.post("/api/owner-auth/login", async (req, res) => {
     try {
-      if (!isOwnerPasscodeValid(req.body?.passcode)) {
-        res.status(401).json({ error: "\u0E23\u0E2B\u0E31\u0E2A\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07" });
+      const attempt = await validateOwnerPasscodeAttempt(req, req.body?.passcode);
+      if (!attempt.allowed) {
+        const message = attempt.locked ? `\u0E25\u0E2D\u0E07\u0E23\u0E2B\u0E31\u0E2A\u0E1C\u0E34\u0E14\u0E2B\u0E25\u0E32\u0E22\u0E04\u0E23\u0E31\u0E49\u0E07 \u0E23\u0E30\u0E1A\u0E1A\u0E25\u0E47\u0E2D\u0E01\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E43\u0E19 ${Math.max(1, Math.ceil(attempt.retryAfterSeconds / 60))} \u0E19\u0E32\u0E17\u0E35` : "\u0E23\u0E2B\u0E31\u0E2A\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07";
+        res.status(attempt.locked ? 429 : 401).json({ error: message });
         return;
       }
       res.status(200).json(await issueOwnerSession(req, res));
@@ -1172,6 +1443,16 @@ var settingsInput = z2.object({
   features: featureInput
 });
 var sendEmailInput = z2.object({ slug: slugSchema, to: z2.string().trim().email("\u0E01\u0E23\u0E2D\u0E01\u0E2D\u0E35\u0E40\u0E21\u0E25\u0E1C\u0E39\u0E49\u0E23\u0E31\u0E1A\u0E43\u0E2B\u0E49\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07").max(254), subject: z2.string().trim().min(1, "\u0E01\u0E23\u0E2D\u0E01\u0E2B\u0E31\u0E27\u0E02\u0E49\u0E2D\u0E2D\u0E35\u0E40\u0E21\u0E25").max(160), message: z2.string().trim().min(1, "\u0E01\u0E23\u0E2D\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E2A\u0E48\u0E07").max(5e3) });
+var availabilityInput = z2.object({ slug: slugSchema, isPaused: z2.boolean(), pausedMessage: z2.string().trim().max(500) });
+var cloneSiteInput = z2.object({ sourceSlug: slugSchema, title: z2.string().trim().min(1).max(160), slug: slugSchema });
+var backupAssetInput = z2.object({ kind: z2.enum(["image", "video", "audio"]), url: z2.string().min(1).max(2048), originalName: z2.string().trim().min(1).max(255), mimeType: z2.string().trim().min(1).max(160), sortOrder: z2.number().int().min(0), caption: z2.string().trim().max(1200).optional(), byteLength: z2.number().int().min(0).optional() });
+var backupInput = z2.object({
+  version: z2.literal(2),
+  exportedAt: z2.string().datetime(),
+  site: z2.object({ title: z2.string().trim().min(1).max(160), slug: slugSchema }),
+  settings: z2.object({ startDate: z2.string().max(32), memoryMessage: z2.string().trim().max(5e3), musicUrl: optionalStoredMusicUrl, facebookUrl: optionalHttpUrl.optional(), instagramUrl: optionalHttpUrl.optional(), themeColor: z2.string().regex(/^#[0-9a-fA-F]{6}$/), features: featureInput, revisionLog: z2.array(z2.object({ at: z2.string(), label: z2.string().max(200) })).max(20).optional() }),
+  assets: z2.array(backupAssetInput).max(300)
+});
 var letterResponseInput = z2.object({
   slug: slugSchema,
   answers: z2.array(z2.object({ question: z2.string().trim().min(1).max(500), answer: z2.string().trim().min(1, "\u0E01\u0E23\u0E2D\u0E01\u0E04\u0E33\u0E15\u0E2D\u0E1A\u0E01\u0E48\u0E2D\u0E19\u0E2A\u0E48\u0E07").max(2e3) })).min(1).max(10),
@@ -1186,6 +1467,8 @@ async function requireOwnedSite(ownerId, slug) {
 var siteRouter = router({
   public: router({
     get: publicProcedure.input(siteInput).query(async ({ ctx, input }) => {
+      const publicStatus = await getPublicSiteStatus(input.slug);
+      if (publicStatus?.isPaused) throw new TRPCError3({ code: "FORBIDDEN", message: publicStatus.pausedMessage });
       const siteId = await getVisitorSiteId(ctx.req);
       if (!siteId) throw new TRPCError3({ code: "UNAUTHORIZED", message: "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E43\u0E2A\u0E48 PIN \u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E40\u0E1B\u0E34\u0E14\u0E04\u0E27\u0E32\u0E21\u0E17\u0E23\u0E07\u0E08\u0E33" });
       const data = await getVisitorSiteData(siteId, input.slug);
@@ -1194,18 +1477,24 @@ var siteRouter = router({
     }),
     unlock: publicProcedure.input(z2.object({ slug: slugSchema, pin: z2.string() })).mutation(async ({ ctx, input }) => {
       if (!isValidPin(input.pin)) return { valid: false };
-      const siteId = await getVisitorSiteIdBySlug(input.slug);
+      const publicStatus = await getPublicSiteStatus(input.slug);
+      if (publicStatus?.isPaused) return { valid: false, paused: true, message: publicStatus.pausedMessage };
+      const siteId = publicStatus?.siteId ?? await getVisitorSiteIdBySlug(input.slug);
       if (!siteId || !await verifySitePin(siteId, input.pin)) return { valid: false };
       const token = await createVisitorAccessToken(siteId);
       ctx.res.cookie(VISITOR_ACCESS_COOKIE, token, { ...getSessionCookieOptions(ctx.req), maxAge: visitorAccessMaxAgeSeconds * 1e3 });
       return { valid: true };
     }),
     recordView: publicProcedure.input(siteInput).mutation(async ({ ctx, input }) => {
+      const publicStatus = await getPublicSiteStatus(input.slug);
+      if (publicStatus?.isPaused) throw new TRPCError3({ code: "FORBIDDEN", message: publicStatus.pausedMessage });
       const siteId = await getVisitorSiteId(ctx.req);
       if (!siteId || !await getVisitorSiteData(siteId, input.slug)) throw new TRPCError3({ code: "UNAUTHORIZED", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C" });
       return recordSiteView(siteId);
     }),
     submitLetterResponse: publicProcedure.input(letterResponseInput).mutation(async ({ ctx, input }) => {
+      const publicStatus = await getPublicSiteStatus(input.slug);
+      if (publicStatus?.isPaused) throw new TRPCError3({ code: "FORBIDDEN", message: publicStatus.pausedMessage });
       const siteId = await getVisitorSiteId(ctx.req);
       if (!siteId || !await getVisitorSiteData(siteId, input.slug)) throw new TRPCError3({ code: "UNAUTHORIZED", message: "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E43\u0E2A\u0E48 PIN \u0E01\u0E48\u0E2D\u0E19\u0E2A\u0E48\u0E07\u0E04\u0E33\u0E15\u0E2D\u0E1A" });
       if (await hasSubmittedLetter(ctx.req, siteId)) return { success: true, alreadySubmitted: true };
@@ -1221,6 +1510,7 @@ var siteRouter = router({
       }
       const answers = letter.prompts.map((item) => ({ question: item.prompt, answer: answerByQuestion.get(item.prompt) ?? "" }));
       await sendLoveOfficeEmail({ to: letter.recipient, subject: `\u0E04\u0E33\u0E15\u0E2D\u0E1A\u0E08\u0E14\u0E2B\u0E21\u0E32\u0E22\u0E08\u0E32\u0E01 ${letter.siteTitle}`, message: buildQuestionAnswerSummary(answers) });
+      await recordSiteLetterResponse(siteId);
       recordLetterResponse(`${input.slug}:${visitorKey}`);
       const submissionToken = await createLetterSubmissionToken(siteId);
       ctx.res.cookie(LETTER_SUBMISSION_COOKIE, submissionToken, { ...getSessionCookieOptions(ctx.req), maxAge: letterSubmissionMaxAgeSeconds * 1e3 });
@@ -1229,6 +1519,8 @@ var siteRouter = router({
   }),
   dashboard: router({
     list: protectedProcedure.query(({ ctx }) => listSitesForOwner(ctx.user.id)),
+    overview: protectedProcedure.query(({ ctx }) => getDashboardOverviewForOwner(ctx.user.id)),
+    securityOverview: protectedProcedure.query(() => getOwnerSecurityOverview()),
     create: protectedProcedure.input(z2.object({ title: z2.string().trim().min(1).max(160), slug: slugSchema })).mutation(async ({ ctx, input }) => {
       try {
         return await createSiteForOwner(ctx.user.id, input);
@@ -1243,6 +1535,15 @@ var siteRouter = router({
       const result = await deleteSiteForOwner(ctx.user.id, input.slug);
       if (!result.success) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E25\u0E1A" });
       return result;
+    }),
+    clone: protectedProcedure.input(cloneSiteInput).mutation(async ({ ctx, input }) => {
+      try {
+        return await cloneSiteForOwner(ctx.user.id, input);
+      } catch (error) {
+        if (error instanceof Error && /duplicate|unique/i.test(error.message)) throw new TRPCError3({ code: "CONFLICT", message: "\u0E0A\u0E37\u0E48\u0E2D\u0E25\u0E34\u0E07\u0E01\u0E4C\u0E19\u0E35\u0E49\u0E16\u0E39\u0E01\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E41\u0E25\u0E49\u0E27 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E0A\u0E37\u0E48\u0E2D\u0E43\u0E2B\u0E21\u0E48" });
+        if (error instanceof Error && /ไม่พบเว็บไซต์ต้นฉบับ/i.test(error.message)) throw new TRPCError3({ code: "NOT_FOUND", message: error.message });
+        throw error;
+      }
     })
   }),
   private: router({
@@ -1277,6 +1578,22 @@ var siteRouter = router({
       }
       return updateSiteSettings(site.id, { ...input, features: input.features });
     }),
+    setAvailability: protectedProcedure.input(availabilityInput).mutation(async ({ ctx, input }) => {
+      await requireOwnedSite(ctx.user.id, input.slug);
+      const result = await setSiteAvailabilityForOwner(ctx.user.id, input.slug, input);
+      if (!result.success) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07" });
+      return result;
+    }),
+    createBackup: protectedProcedure.input(siteInput).query(async ({ ctx, input }) => {
+      const backup = await createSiteBackupForOwner(ctx.user.id, input.slug);
+      if (!backup) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07" });
+      return backup;
+    }),
+    restoreBackup: protectedProcedure.input(z2.object({ slug: slugSchema, backup: backupInput })).mutation(async ({ ctx, input }) => {
+      const result = await restoreSiteBackupForOwner(ctx.user.id, input.slug, input.backup);
+      if (!result.success) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07" });
+      return result;
+    }),
     sendEmail: protectedProcedure.input(sendEmailInput).mutation(async ({ ctx, input }) => {
       await requireOwnedSite(ctx.user.id, input.slug);
       return sendLoveOfficeEmail(input);
@@ -1303,6 +1620,10 @@ var siteRouter = router({
     removeMedia: protectedProcedure.input(z2.object({ slug: slugSchema, id: z2.number().int().positive() })).mutation(async ({ ctx, input }) => {
       const site = await requireOwnedSite(ctx.user.id, input.slug);
       return deleteMediaAsset(site.id, input.id);
+    }),
+    bulkRemoveMedia: protectedProcedure.input(z2.object({ slug: slugSchema, ids: z2.array(z2.number().int().positive()).min(1).max(100) })).mutation(async ({ ctx, input }) => {
+      const site = await requireOwnedSite(ctx.user.id, input.slug);
+      return deleteMediaAssets(site.id, input.ids);
     }),
     reorderMedia: protectedProcedure.input(z2.object({ slug: slugSchema, id: z2.number().int().positive(), sortOrder: z2.number().int().min(0) })).mutation(async ({ ctx, input }) => {
       const site = await requireOwnedSite(ctx.user.id, input.slug);
@@ -1334,8 +1655,12 @@ var appRouter = router({
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
     login: publicProcedure.input(ownerPasscodeInput).mutation(async ({ ctx, input }) => {
-      if (!isOwnerPasscodeValid(input.passcode)) {
-        throw new TRPCError4({ code: "UNAUTHORIZED", message: "\u0E23\u0E2B\u0E31\u0E2A\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07" });
+      const attempt = await validateOwnerPasscodeAttempt(ctx.req, input.passcode);
+      if (!attempt.allowed) {
+        throw new TRPCError4({
+          code: attempt.locked ? "TOO_MANY_REQUESTS" : "UNAUTHORIZED",
+          message: attempt.locked ? `\u0E25\u0E2D\u0E07\u0E23\u0E2B\u0E31\u0E2A\u0E1C\u0E34\u0E14\u0E2B\u0E25\u0E32\u0E22\u0E04\u0E23\u0E31\u0E49\u0E07 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E25\u0E2D\u0E07\u0E43\u0E2B\u0E21\u0E48\u0E43\u0E19 ${Math.max(1, Math.ceil(attempt.retryAfterSeconds / 60))} \u0E19\u0E32\u0E17\u0E35` : "\u0E23\u0E2B\u0E31\u0E2A\u0E15\u0E31\u0E27\u0E40\u0E25\u0E02\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07"
+        });
       }
       try {
         return await issueOwnerSession(ctx.req, ctx.res);

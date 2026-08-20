@@ -5,6 +5,7 @@ import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { ENV } from "./env";
 import { sdk } from "./sdk";
+import { recordOwnerLoginAttempt } from "../adminSecurity";
 
 export const OWNER_SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -25,11 +26,19 @@ export async function issueOwnerSession(req: Request, res: Response) {
   return { success: true } as const;
 }
 
+export async function validateOwnerPasscodeAttempt(req: Request, passcode: unknown) {
+  return recordOwnerLoginAttempt(req, isOwnerPasscodeValid(passcode));
+}
+
 export function registerOwnerPasscodeAuthRoutes(app: Express) {
   app.post("/api/owner-auth/login", async (req: Request, res: Response) => {
     try {
-      if (!isOwnerPasscodeValid(req.body?.passcode)) {
-        res.status(401).json({ error: "รหัสตัวเลขไม่ถูกต้อง" });
+      const attempt = await validateOwnerPasscodeAttempt(req, req.body?.passcode);
+      if (!attempt.allowed) {
+        const message = attempt.locked
+          ? `ลองรหัสผิดหลายครั้ง ระบบล็อกชั่วคราว กรุณาลองใหม่ใน ${Math.max(1, Math.ceil(attempt.retryAfterSeconds / 60))} นาที`
+          : "รหัสตัวเลขไม่ถูกต้อง";
+        res.status(attempt.locked ? 429 : 401).json({ error: message });
         return;
       }
       res.status(200).json(await issueOwnerSession(req, res));

@@ -12,19 +12,32 @@ const deleteSiteForOwner = vi.fn(async (ownerId: number, slug: string) => ({ suc
 const sendLoveOfficeEmail = vi.fn(async () => ({ id: "email_123" }));
 const getQuestionLetterBySlug = vi.fn(async (slug: string) => slug === "main-memory" ? ({ siteTitle: "เว็บไซต์ความทรงจำหลัก", enabled: true, title: "คำถามถึงเธอ", prompts: features.questionLetterPrompts, recipient: "owner@example.com" }) : undefined);
 const getVisitorSiteIdBySlug = vi.fn(async (slug: string) => slug === "main-memory" ? 9 : undefined);
+const getPublicSiteStatus = vi.fn(async (slug: string) => slug === "main-memory" ? ({ siteId: 9, isPaused: false, pausedMessage: "เว็บไซต์นี้พักการแสดงผลชั่วคราว" }) : undefined);
 const getVisitorSiteData = vi.fn(async (siteId: number, slug: string) => siteId === 9 && slug === "main-memory" ? ({ site: { id: 9, title: "เว็บไซต์ความทรงจำหลัก", slug }, settings: { id: 42, startDate: "2024-04-06", memoryMessage: "เทส", musicUrl: "", facebookUrl: "", instagramUrl: "", themeColor: "#ec4899", features: { ...features, questionLetterRecipient: undefined } }, images: [], videos: [] }) : undefined);
 const getVisitorSiteId = vi.fn(async () => 9);
 const createVisitorAccessToken = vi.fn(async () => "signed-visitor-token");
 const createLetterSubmissionToken = vi.fn(async () => "signed-letter-token");
 const hasSubmittedLetter = vi.fn(async () => false);
 const updateImageCaption = vi.fn(async (_siteId: number, _id: number, caption: string) => ({ success: true, caption }));
+const getDashboardOverviewForOwner = vi.fn(async () => ({ totals: { sites: 1, views: 12, letterResponses: 3, storageBytes: 2_048, pausedSites: 0 }, trend: [], recentActivity: [], sites: [] }));
+const getOwnerSecurityOverview = vi.fn(async () => ({ activeLocks: 0, policy: { maxFailedAttempts: 5, lockMinutes: 15, windowMinutes: 15 }, recentEvents: [] }));
+const cloneSiteForOwner = vi.fn(async (ownerId: number, input: { title: string; slug: string }) => ({ id: 10, ownerId, ...input }));
+const setSiteAvailabilityForOwner = vi.fn(async () => ({ success: true, isPaused: true, pausedMessage: "พักชั่วคราว" }));
+const createSiteBackupForOwner = vi.fn(async () => ({ version: 2 as const, exportedAt: new Date().toISOString(), site: { title: "เทส", slug: "main-memory" }, settings: { startDate: "2024-04-06", memoryMessage: "เทส", musicUrl: "", facebookUrl: "", instagramUrl: "", themeColor: "#ec4899", features, revisionLog: [] }, assets: [] }));
+const restoreSiteBackupForOwner = vi.fn(async () => ({ success: true, restoredAssets: 0 }));
+const deleteMediaAssets = vi.fn(async () => ({ success: true, removed: 2 }));
 
 vi.mock("../db", () => ({
+  cloneSiteForOwner,
+  createSiteBackupForOwner,
   createMediaAsset: vi.fn(),
   createSiteForOwner,
   deleteMediaAsset: vi.fn(),
+  deleteMediaAssets,
   deleteSiteForOwner,
+  getDashboardOverviewForOwner,
   getAdminSiteData,
+  getPublicSiteStatus,
   getQuestionLetterBySlug,
   getVisitorSiteData,
   getVisitorSiteIdBySlug,
@@ -32,7 +45,10 @@ vi.mock("../db", () => ({
   getPrivateSiteData,
   listMediaAssets: vi.fn(async () => []),
   listSitesForOwner: vi.fn(async () => []),
+  recordSiteLetterResponse: vi.fn(async () => ({ success: true })),
   recordSiteView: vi.fn(),
+  restoreSiteBackupForOwner,
+  setSiteAvailabilityForOwner,
   setMusicUrl: vi.fn(),
   uploadCustomFont: vi.fn(),
   updateMediaOrder: vi.fn(),
@@ -40,6 +56,7 @@ vi.mock("../db", () => ({
   updateSiteSettings,
   verifySitePin,
 }));
+vi.mock("../adminSecurity", () => ({ getOwnerSecurityOverview }));
 vi.mock("../email", () => ({ sendLoveOfficeEmail, buildQuestionAnswerSummary: (answers: Array<{ question: string; answer: string }>) => answers.map(({ question, answer }, index) => `คำถามข้อ ${index + 1}: ${question}\n\nคำตอบ: ${answer}`).join("\n\n──────────\n\n") }));
 vi.mock("../visitorAccess", () => ({ createLetterSubmissionToken, createVisitorAccessToken, getVisitorSiteId, hasSubmittedLetter, letterSubmissionMaxAgeSeconds: 31_536_000, visitorAccessMaxAgeSeconds: 86_400, LETTER_SUBMISSION_COOKIE: "loveoffice_letter_submitted", VISITOR_ACCESS_COOKIE: "loveoffice_site_access" }));
 vi.mock("../_core/cookies", () => ({ getSessionCookieOptions: () => ({ httpOnly: true, path: "/", sameSite: "none", secure: true }) }));
@@ -142,5 +159,47 @@ describe("multi-site router", () => {
     await expect(otherCaller.dashboard.remove({ slug: "main-memory" })).rejects.toMatchObject({ code: "NOT_FOUND" });
     expect(deleteSiteForOwner).toHaveBeenCalledWith(1, "main-memory");
     expect(deleteSiteForOwner).toHaveBeenCalledWith(2, "main-memory");
+  });
+
+  it("returns dashboard analytics and non-identifying security state only to an authenticated owner", async () => {
+    const caller = siteRouter.createCaller({ user: owner } as never);
+    await expect(caller.dashboard.overview()).resolves.toMatchObject({ totals: { views: 12, letterResponses: 3 } });
+    await expect(caller.dashboard.securityOverview()).resolves.toMatchObject({ activeLocks: 0, policy: { maxFailedAttempts: 5 } });
+    expect(getDashboardOverviewForOwner).toHaveBeenCalledWith(1);
+  });
+
+  it("clones a site only under the authenticated owner and starts from a new slug", async () => {
+    const caller = siteRouter.createCaller({ user: owner } as never);
+    await expect(caller.dashboard.clone({ sourceSlug: "main-memory", title: "สำเนาสำหรับเซอร์ไพรส์", slug: "memory-copy" })).resolves.toMatchObject({ ownerId: 1, slug: "memory-copy" });
+    expect(cloneSiteForOwner).toHaveBeenCalledWith(1, expect.objectContaining({ sourceSlug: "main-memory", slug: "memory-copy" }));
+  });
+
+  it("lets only the site owner pause a public site and reports the chosen message", async () => {
+    const caller = siteRouter.createCaller({ user: owner } as never);
+    await expect(caller.admin.setAvailability({ slug: "main-memory", isPaused: true, pausedMessage: "กำลังเตรียมเซอร์ไพรส์" })).resolves.toMatchObject({ success: true, isPaused: true });
+    expect(setSiteAvailabilityForOwner).toHaveBeenCalledWith(1, "main-memory", expect.objectContaining({ isPaused: true }));
+    const otherCaller = siteRouter.createCaller({ user: otherOwner } as never);
+    await expect(otherCaller.admin.setAvailability({ slug: "main-memory", isPaused: true, pausedMessage: "ไม่ควรเปลี่ยนได้" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  it("exports and restores a site backup only for its owner without PIN in the exported payload", async () => {
+    const caller = siteRouter.createCaller({ user: owner } as never);
+    const backup = await caller.admin.createBackup({ slug: "main-memory" });
+    expect(backup).toMatchObject({ version: 2, site: { slug: "main-memory" } });
+    expect(JSON.stringify(backup)).not.toContain("pinHash");
+    await expect(caller.admin.restoreBackup({ slug: "main-memory", backup })).resolves.toEqual({ success: true, restoredAssets: 0 });
+    expect(restoreSiteBackupForOwner).toHaveBeenCalledWith(1, "main-memory", expect.objectContaining({ version: 2 }));
+  });
+
+  it("allows the owner to remove selected media in one operation", async () => {
+    const caller = siteRouter.createCaller({ user: owner } as never);
+    await expect(caller.admin.bulkRemoveMedia({ slug: "main-memory", ids: [17, 18] })).resolves.toEqual({ success: true, removed: 2 });
+    expect(deleteMediaAssets).toHaveBeenCalledWith(9, [17, 18]);
+  });
+
+  it("does not unlock a paused public site even when its PIN is correct", async () => {
+    getPublicSiteStatus.mockResolvedValueOnce({ siteId: 9, isPaused: true, pausedMessage: "กำลังจัดเตรียมความทรงจำ" });
+    const caller = siteRouter.createCaller({ user: null, req: { header: () => "", headers: {} }, res: { cookie: vi.fn() } } as never);
+    await expect(caller.public.unlock({ slug: "main-memory", pin: "0000" })).resolves.toEqual({ valid: false, paused: true, message: "กำลังจัดเตรียมความทรงจำ" });
   });
 });

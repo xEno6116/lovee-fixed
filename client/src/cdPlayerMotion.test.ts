@@ -13,6 +13,6 @@ describe("CD player motion", () => {
   it("runs movement only while playing and disables it for reduced motion", () => {
     expect(styles).toContain(".legacy-cd-player.playing .legacy-cd-disc { animation-play-state: running; }");
     expect(styles).toContain(".legacy-cd-player.playing .legacy-cd-disc::after { animation: legacy-disc-glint");
-    expect(styles).toContain(".legacy-cd-disc, .legacy-cd-disc::after, .legacy-cd-case { animation: none !important; }");
+    expect(styles).toContain(".legacy-cd-disc, .legacy-cd-disc::after, .legacy-cd-case, .legacy-tape-reel { animation: none !important; }");
   });
 });

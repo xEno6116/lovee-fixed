@@ -75,6 +75,10 @@ type StoredAsset = {
   createdAt: string;
 };
 
+type DailyAnalytics = { date: string; views: number; letterResponses: number };
+type SiteActivityKind = "created" | "settings" | "media" | "security" | "availability" | "clone" | "restore";
+type SiteActivity = { id: string; at: string; kind: SiteActivityKind; label: string };
+
 type StoredSite = {
   id: number;
   ownerId: number;
@@ -84,6 +88,11 @@ type StoredSite = {
   updatedAt: string;
   viewCount?: number;
   lastViewedAt?: string;
+  letterResponseCount?: number;
+  isPaused?: boolean;
+  pausedMessage?: string;
+  dailyAnalytics?: DailyAnalytics[];
+  activityLog?: SiteActivity[];
   settings: StoredSettings;
   assets: StoredAsset[];
 };
@@ -196,6 +205,36 @@ function sortAssets(assets: StoredAsset[]) {
   );
 }
 
+function utcDateKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+function getDailyAnalytics(site: StoredSite, date = utcDateKey()) {
+  const entries = site.dailyAnalytics ?? (site.dailyAnalytics = []);
+  let entry = entries.find((item) => item.date === date);
+  if (!entry) {
+    entry = { date, views: 0, letterResponses: 0 };
+    entries.push(entry);
+  }
+  site.dailyAnalytics = entries.sort((left, right) => right.date.localeCompare(left.date)).slice(0, 120);
+  return entry;
+}
+
+function appendSiteActivity(site: StoredSite, kind: SiteActivityKind, label: string, at = new Date().toISOString()) {
+  const activity: SiteActivity = { id: nanoid(12), at, kind, label };
+  site.activityLog = [activity, ...(site.activityLog ?? [])].slice(0, 80);
+  return activity;
+}
+
+function analyticsWindow(site: StoredSite, days = 7) {
+  const byDate = new Map((site.dailyAnalytics ?? []).map((item) => [item.date, item]));
+  return Array.from({ length: days }, (_, index) => {
+    const date = utcDateKey(new Date(Date.now() - (days - 1 - index) * 86_400_000));
+    const item = byDate.get(date);
+    return { date, views: item?.views ?? 0, letterResponses: item?.letterResponses ?? 0 };
+  });
+}
+
 function toApplicationUser(user: StoredUser): User {
   return {
     ...user,
@@ -253,6 +292,38 @@ export async function listSitesForOwner(ownerId: number) {
     .map(toClientSite);
 }
 
+export async function getDashboardOverviewForOwner(ownerId: number) {
+  const { data } = await readRepository();
+  const sites = data.sites.filter((site) => site.ownerId === ownerId);
+  const dates = Array.from({ length: 7 }, (_, index) => utcDateKey(new Date(Date.now() - (6 - index) * 86_400_000)));
+  const totalsByDate = new Map(dates.map((date) => [date, { date, views: 0, letterResponses: 0 }]));
+  const activities: Array<SiteActivity & { siteSlug: string; siteTitle: string }> = [];
+  let totalViews = 0;
+  let totalLetters = 0;
+  let storageBytes = 0;
+
+  for (const site of sites) {
+    totalViews += site.viewCount ?? 0;
+    totalLetters += site.letterResponseCount ?? 0;
+    storageBytes += site.assets.reduce((sum, asset) => sum + (asset.byteLength ?? 0), 0);
+    for (const item of site.dailyAnalytics ?? []) {
+      const aggregate = totalsByDate.get(item.date);
+      if (aggregate) {
+        aggregate.views += item.views;
+        aggregate.letterResponses += item.letterResponses;
+      }
+    }
+    activities.push(...(site.activityLog ?? []).map((item) => ({ ...item, siteSlug: site.slug, siteTitle: site.title })));
+  }
+
+  return {
+    totals: { sites: sites.length, views: totalViews, letterResponses: totalLetters, storageBytes, pausedSites: sites.filter((site) => site.isPaused).length },
+    trend: dates.map((date) => totalsByDate.get(date)!),
+    recentActivity: activities.sort((left, right) => right.at.localeCompare(left.at)).slice(0, 12),
+    sites: sites.map((site) => ({ ...toClientSite(site), viewCount: site.viewCount ?? 0, letterResponseCount: site.letterResponseCount ?? 0, storageBytes: site.assets.reduce((sum, asset) => sum + (asset.byteLength ?? 0), 0), isPaused: Boolean(site.isPaused), lastViewedAt: site.lastViewedAt ?? "" })),
+  };
+}
+
 export async function getOwnedSiteBySlug(ownerId: number, slug: string) {
   const { data } = await readRepository();
   return data.sites.find((site) => site.ownerId === ownerId && site.slug === slug);
@@ -273,6 +344,11 @@ export async function createSiteForOwner(ownerId: number, input: { title: string
       createdAt: now,
       updatedAt: now,
       viewCount: 0,
+      letterResponseCount: 0,
+      isPaused: false,
+      pausedMessage: "เว็บไซต์นี้พักการแสดงผลชั่วคราว",
+      dailyAnalytics: [],
+      activityLog: [],
       settings: {
         id: repository.nextSettingsId++,
         siteId,
@@ -290,6 +366,7 @@ export async function createSiteForOwner(ownerId: number, input: { title: string
       },
       assets: [],
     };
+    appendSiteActivity(site, "created", "สร้างเว็บไซต์ใหม่", now);
     repository.sites.push(site);
     return { data: repository, result: toClientSite(site) };
   });
@@ -301,6 +378,110 @@ export async function deleteSiteForOwner(ownerId: number, slug: string) {
     if (index === -1) return { data: repository, result: { success: false } };
     repository.sites.splice(index, 1);
     return { data: repository, result: { success: true } };
+  });
+}
+
+export async function cloneSiteForOwner(ownerId: number, input: { sourceSlug: string; title: string; slug: string }) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: clone ${input.sourceSlug} to ${input.slug}`, (repository) => {
+    const source = repository.sites.find((site) => site.ownerId === ownerId && site.slug === input.sourceSlug);
+    if (!source) throw new Error("ไม่พบเว็บไซต์ต้นฉบับ หรือคุณไม่มีสิทธิ์โคลน");
+    if (repository.sites.some((site) => site.slug === input.slug)) throw new Error("duplicate site slug");
+    const now = new Date().toISOString();
+    const siteId = repository.nextSiteId++;
+    const settings: StoredSettings = {
+      ...structuredClone(source.settings),
+      id: repository.nextSettingsId++,
+      siteId,
+      pinHash: hashPin(DEFAULT_PIN),
+      revisionLog: [{ at: now, label: `สร้างจากสำเนา ${source.title}` }],
+      createdAt: now,
+      updatedAt: now,
+    };
+    const assets = source.assets.map((asset) => ({ ...structuredClone(asset), id: repository.nextAssetId++, siteId, createdAt: now }));
+    const cloned: StoredSite = {
+      id: siteId,
+      ownerId,
+      slug: input.slug,
+      title: input.title,
+      createdAt: now,
+      updatedAt: now,
+      viewCount: 0,
+      letterResponseCount: 0,
+      isPaused: false,
+      pausedMessage: "เว็บไซต์นี้พักการแสดงผลชั่วคราว",
+      dailyAnalytics: [],
+      activityLog: [],
+      settings,
+      assets,
+    };
+    appendSiteActivity(cloned, "clone", `สร้างสำเนาจาก ${source.title}`, now);
+    appendSiteActivity(source, "clone", `สร้างสำเนาใหม่ชื่อ ${input.title}`, now);
+    repository.sites.push(cloned);
+    return { data: repository, result: toClientSite(cloned) };
+  });
+}
+
+export async function setSiteAvailabilityForOwner(ownerId: number, slug: string, input: { isPaused: boolean; pausedMessage: string }) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: availability ${slug}`, (repository) => {
+    const site = repository.sites.find((item) => item.ownerId === ownerId && item.slug === slug);
+    if (!site) return { data: repository, result: { success: false, isPaused: false, pausedMessage: "" } };
+    const now = new Date().toISOString();
+    site.isPaused = input.isPaused;
+    site.pausedMessage = input.pausedMessage.trim() || "เว็บไซต์นี้พักการแสดงผลชั่วคราว";
+    site.updatedAt = now;
+    appendSiteActivity(site, "availability", input.isPaused ? "พักการแสดงผลหน้าบ้าน" : "เปิดการแสดงผลหน้าบ้าน", now);
+    return { data: repository, result: { success: true, isPaused: site.isPaused, pausedMessage: site.pausedMessage } };
+  });
+}
+
+type SiteBackup = {
+  version: 2;
+  exportedAt: string;
+  site: { title: string; slug: string };
+  settings: Omit<StoredSettings, "id" | "siteId" | "pinHash" | "createdAt" | "updatedAt">;
+  assets: Array<Omit<StoredAsset, "id" | "siteId" | "storageKey" | "createdAt">>;
+};
+
+export async function createSiteBackupForOwner(ownerId: number, slug: string): Promise<SiteBackup | undefined> {
+  const site = await getOwnedSiteBySlug(ownerId, slug);
+  if (!site) return undefined;
+  const { id: _settingsId, siteId: _settingsSiteId, pinHash: _pinHash, createdAt: _settingsCreatedAt, updatedAt: _settingsUpdatedAt, ...settings } = structuredClone(site.settings);
+  return {
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    site: { title: site.title, slug: site.slug },
+    settings,
+    assets: sortAssets(site.assets).map(({ id: _id, siteId: _siteId, storageKey: _storageKey, createdAt: _createdAt, ...asset }) => asset),
+  };
+}
+
+export async function restoreSiteBackupForOwner(ownerId: number, slug: string, backup: SiteBackup) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: restore ${slug}`, (repository) => {
+    const site = repository.sites.find((item) => item.ownerId === ownerId && item.slug === slug);
+    if (!site) return { data: repository, result: { success: false, restoredAssets: 0 } };
+    const now = new Date().toISOString();
+    const originalPinHash = site.settings.pinHash;
+    site.settings = {
+      ...site.settings,
+      ...structuredClone(backup.settings),
+      id: site.settings.id,
+      siteId: site.id,
+      pinHash: originalPinHash,
+      revisionLog: [{ at: now, label: "กู้คืนข้อมูลจากไฟล์สำรอง" }, ...(site.settings.revisionLog ?? [])].slice(0, 20),
+      createdAt: site.settings.createdAt,
+      updatedAt: now,
+    };
+    const previousStorageByUrl = new Map(site.assets.map((asset) => [asset.url, asset.storageKey]));
+    site.assets = backup.assets.map((asset) => ({
+      ...structuredClone(asset),
+      id: repository.nextAssetId++,
+      siteId: site.id,
+      storageKey: previousStorageByUrl.get(asset.url) ?? "",
+      createdAt: now,
+    }));
+    site.updatedAt = now;
+    appendSiteActivity(site, "restore", "กู้คืนข้อมูลจากไฟล์สำรอง", now);
+    return { data: repository, result: { success: true, restoredAssets: site.assets.length } };
   });
 }
 
@@ -342,6 +523,17 @@ export async function getVisitorSiteIdBySlug(slug: string) {
   return data.sites.find((site) => site.slug === slug)?.id;
 }
 
+export async function getPublicSiteStatus(slug: string) {
+  const { data } = await readRepository();
+  const site = data.sites.find((item) => item.slug === slug);
+  if (!site) return undefined;
+  return {
+    siteId: site.id,
+    isPaused: Boolean(site.isPaused),
+    pausedMessage: site.pausedMessage?.trim() || "เว็บไซต์นี้พักการแสดงผลชั่วคราว",
+  };
+}
+
 export async function getVisitorSiteData(siteId: number, slug: string) {
   const { data } = await readRepository();
   const site = data.sites.find((item) => item.id === siteId && item.slug === slug);
@@ -374,6 +566,11 @@ export async function getAdminSiteData(ownerId: number, slug: string) {
     storageBytes: site.assets.reduce((sum, asset) => sum + (asset.byteLength ?? 0), 0),
     viewCount: site.viewCount ?? 0,
     lastViewedAt: site.lastViewedAt ?? "",
+    letterResponseCount: site.letterResponseCount ?? 0,
+    isPaused: Boolean(site.isPaused),
+    pausedMessage: site.pausedMessage ?? "เว็บไซต์นี้พักการแสดงผลชั่วคราว",
+    analytics: analyticsWindow(site, 30),
+    activityLog: (site.activityLog ?? []).slice(0, 30),
   };
 }
 
@@ -383,7 +580,19 @@ export async function recordSiteView(siteId: number) {
     if (!site) return { data: repository, result: { success: false, views: 0 } };
     site.viewCount = (site.viewCount ?? 0) + 1;
     site.lastViewedAt = new Date().toISOString();
+    getDailyAnalytics(site).views += 1;
     return { data: repository, result: { success: true, views: site.viewCount } };
+  });
+}
+
+export async function recordSiteLetterResponse(siteId: number) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: record letter ${siteId}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) return { data: repository, result: { success: false } };
+    site.letterResponseCount = (site.letterResponseCount ?? 0) + 1;
+    getDailyAnalytics(site).letterResponses += 1;
+    appendSiteActivity(site, "security", "ได้รับคำตอบจดหมายจากผู้เยี่ยมชม");
+    return { data: repository, result: { success: true } };
   });
 }
 
@@ -409,6 +618,7 @@ export async function updateSiteSettings(siteId: number, input: { facebookUrl: s
       updatedAt: now,
     };
     site.updatedAt = now;
+    appendSiteActivity(site, "settings", input.pin ? "บันทึกการตั้งค่าและเปลี่ยน PIN เว็บไซต์" : "บันทึกการตั้งค่าเว็บไซต์", now);
     return { data: repository, result: toClientSettings(site.settings) };
   });
 }
@@ -424,6 +634,7 @@ export async function uploadCustomFont(siteId: number, input: { originalName: st
     site.settings.revisionLog = [{ at: now, label: "อัปโหลดฟอนต์ส่วนตัว" }, ...(site.settings.revisionLog ?? [])].slice(0, 20);
     site.settings.updatedAt = now;
     site.updatedAt = now;
+    appendSiteActivity(site, "media", "อัปโหลดฟอนต์ส่วนตัว", now);
     return { data: repository, result: { url: uploaded.url, name: input.originalName } };
   });
 }
@@ -436,6 +647,7 @@ export async function setMusicUrl(siteId: number, musicUrl: string) {
     site.settings.musicUrl = musicUrl;
     site.settings.updatedAt = now;
     site.updatedAt = now;
+    appendSiteActivity(site, "media", "อัปเดตเพลงพื้นหลัง", now);
     return { data: repository, result: undefined };
   });
 }
@@ -463,6 +675,7 @@ export async function createMediaAsset(siteId: number, input: { kind: MediaKind;
     };
     site.assets.push(created);
     site.updatedAt = new Date().toISOString();
+    appendSiteActivity(site, "media", `อัปโหลด${input.kind === "image" ? "รูปภาพ" : input.kind === "video" ? "วิดีโอ" : "เพลง"}`);
     return { data: repository, result: toClientAsset(created) };
   });
 }
@@ -479,7 +692,27 @@ export async function deleteMediaAsset(siteId: number, id: number) {
     }
     site.assets.splice(assetIndex, 1);
     site.updatedAt = new Date().toISOString();
+    appendSiteActivity(site, "media", "ลบไฟล์สื่อ");
     return { data: repository, result: { success: true } };
+  });
+}
+
+export async function deleteMediaAssets(siteId: number, ids: number[]) {
+  const uniqueIds = Array.from(new Set(ids));
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: bulk remove media ${siteId}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) return { data: repository, result: { success: false, removed: 0 } };
+    const selected = site.assets.filter((asset) => uniqueIds.includes(asset.id));
+    if (!selected.length) return { data: repository, result: { success: true, removed: 0 } };
+    const removedUrls = new Set(selected.map((asset) => asset.url));
+    site.assets = site.assets.filter((asset) => !uniqueIds.includes(asset.id));
+    if (removedUrls.has(site.settings.musicUrl)) {
+      site.settings.musicUrl = "";
+      site.settings.updatedAt = new Date().toISOString();
+    }
+    site.updatedAt = new Date().toISOString();
+    appendSiteActivity(site, "media", `ลบไฟล์สื่อ ${selected.length} รายการ`);
+    return { data: repository, result: { success: true, removed: selected.length } };
   });
 }
 
@@ -490,6 +723,7 @@ export async function updateMediaOrder(siteId: number, id: number, sortOrder: nu
     if (!site || !asset) return { data: repository, result: { success: false } };
     asset.sortOrder = sortOrder;
     site.updatedAt = new Date().toISOString();
+    appendSiteActivity(site, "media", "จัดเรียงสื่อใหม่");
     return { data: repository, result: { success: true } };
   });
 }
@@ -501,6 +735,7 @@ export async function updateImageCaption(siteId: number, id: number, caption: st
     if (!site || !asset) return { data: repository, result: { success: false, caption: "" } };
     asset.caption = caption.trim();
     site.updatedAt = new Date().toISOString();
+    appendSiteActivity(site, "settings", "บันทึกข้อความกำกับรูปภาพ");
     return { data: repository, result: { success: true, caption: asset.caption } };
   });
 }

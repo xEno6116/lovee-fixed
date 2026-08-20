@@ -1,11 +1,16 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
+  cloneSiteForOwner,
+  createSiteBackupForOwner,
   createMediaAsset,
   createSiteForOwner,
   deleteMediaAsset,
+  deleteMediaAssets,
   deleteSiteForOwner,
+  getDashboardOverviewForOwner,
   getAdminSiteData,
+  getPublicSiteStatus,
   getQuestionLetterBySlug,
   getOwnedSiteBySlug,
   getPrivateSiteData,
@@ -13,7 +18,10 @@ import {
   getVisitorSiteIdBySlug,
   type FeatureSettings,
   listMediaAssets,
+  recordSiteLetterResponse,
   recordSiteView,
+  restoreSiteBackupForOwner,
+  setSiteAvailabilityForOwner,
   uploadCustomFont,
   listSitesForOwner,
   setMusicUrl,
@@ -22,6 +30,7 @@ import {
   updateSiteSettings,
   verifySitePin,
 } from "../db";
+import { getOwnerSecurityOverview } from "../adminSecurity";
 import { decodeDataUrl, fontMimeTypeFromFileName, isAllowedFont, isAllowedMedia, isValidPin } from "../siteUtils";
 import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { buildQuestionAnswerSummary, sendLoveOfficeEmail } from "../email";
@@ -53,6 +62,16 @@ const settingsInput = z.object({
   features: featureInput,
 });
 const sendEmailInput = z.object({ slug: slugSchema, to: z.string().trim().email("กรอกอีเมลผู้รับให้ถูกต้อง").max(254), subject: z.string().trim().min(1, "กรอกหัวข้ออีเมล").max(160), message: z.string().trim().min(1, "กรอกข้อความที่ต้องการส่ง").max(5_000) });
+const availabilityInput = z.object({ slug: slugSchema, isPaused: z.boolean(), pausedMessage: z.string().trim().max(500) });
+const cloneSiteInput = z.object({ sourceSlug: slugSchema, title: z.string().trim().min(1).max(160), slug: slugSchema });
+const backupAssetInput = z.object({ kind: z.enum(["image", "video", "audio"]), url: z.string().min(1).max(2_048), originalName: z.string().trim().min(1).max(255), mimeType: z.string().trim().min(1).max(160), sortOrder: z.number().int().min(0), caption: z.string().trim().max(1_200).optional(), byteLength: z.number().int().min(0).optional() });
+const backupInput = z.object({
+  version: z.literal(2),
+  exportedAt: z.string().datetime(),
+  site: z.object({ title: z.string().trim().min(1).max(160), slug: slugSchema }),
+  settings: z.object({ startDate: z.string().max(32), memoryMessage: z.string().trim().max(5_000), musicUrl: optionalStoredMusicUrl, facebookUrl: optionalHttpUrl.optional(), instagramUrl: optionalHttpUrl.optional(), themeColor: z.string().regex(/^#[0-9a-fA-F]{6}$/), features: featureInput, revisionLog: z.array(z.object({ at: z.string(), label: z.string().max(200) })).max(20).optional() }),
+  assets: z.array(backupAssetInput).max(300),
+});
 const letterResponseInput = z.object({
   slug: slugSchema,
   answers: z.array(z.object({ question: z.string().trim().min(1).max(500), answer: z.string().trim().min(1, "กรอกคำตอบก่อนส่ง").max(2_000) })).min(1).max(10),
@@ -71,6 +90,8 @@ export const siteRouter = router({
     get: publicProcedure
       .input(siteInput)
       .query(async ({ ctx, input }) => {
+        const publicStatus = await getPublicSiteStatus(input.slug);
+        if (publicStatus?.isPaused) throw new TRPCError({ code: "FORBIDDEN", message: publicStatus.pausedMessage });
         const siteId = await getVisitorSiteId(ctx.req);
         if (!siteId) throw new TRPCError({ code: "UNAUTHORIZED", message: "กรุณาใส่ PIN เพื่อเปิดความทรงจำ" });
         const data = await getVisitorSiteData(siteId, input.slug);
@@ -81,7 +102,9 @@ export const siteRouter = router({
       .input(z.object({ slug: slugSchema, pin: z.string() }))
       .mutation(async ({ ctx, input }) => {
         if (!isValidPin(input.pin)) return { valid: false };
-        const siteId = await getVisitorSiteIdBySlug(input.slug);
+        const publicStatus = await getPublicSiteStatus(input.slug);
+        if (publicStatus?.isPaused) return { valid: false, paused: true, message: publicStatus.pausedMessage };
+        const siteId = publicStatus?.siteId ?? await getVisitorSiteIdBySlug(input.slug);
         if (!siteId || !(await verifySitePin(siteId, input.pin))) return { valid: false };
         const token = await createVisitorAccessToken(siteId);
         ctx.res.cookie(VISITOR_ACCESS_COOKIE, token, { ...getSessionCookieOptions(ctx.req), maxAge: visitorAccessMaxAgeSeconds * 1_000 });
@@ -90,6 +113,8 @@ export const siteRouter = router({
     recordView: publicProcedure
       .input(siteInput)
       .mutation(async ({ ctx, input }) => {
+        const publicStatus = await getPublicSiteStatus(input.slug);
+        if (publicStatus?.isPaused) throw new TRPCError({ code: "FORBIDDEN", message: publicStatus.pausedMessage });
         const siteId = await getVisitorSiteId(ctx.req);
         if (!siteId || !(await getVisitorSiteData(siteId, input.slug))) throw new TRPCError({ code: "UNAUTHORIZED", message: "ไม่พบสิทธิ์เข้าถึงเว็บไซต์" });
         return recordSiteView(siteId);
@@ -97,6 +122,8 @@ export const siteRouter = router({
     submitLetterResponse: publicProcedure
       .input(letterResponseInput)
       .mutation(async ({ ctx, input }) => {
+        const publicStatus = await getPublicSiteStatus(input.slug);
+        if (publicStatus?.isPaused) throw new TRPCError({ code: "FORBIDDEN", message: publicStatus.pausedMessage });
         const siteId = await getVisitorSiteId(ctx.req);
         if (!siteId || !(await getVisitorSiteData(siteId, input.slug))) throw new TRPCError({ code: "UNAUTHORIZED", message: "กรุณาใส่ PIN ก่อนส่งคำตอบ" });
         if (await hasSubmittedLetter(ctx.req, siteId)) return { success: true, alreadySubmitted: true };
@@ -112,6 +139,7 @@ export const siteRouter = router({
         }
         const answers = letter.prompts.map((item) => ({ question: item.prompt, answer: answerByQuestion.get(item.prompt) ?? "" }));
         await sendLoveOfficeEmail({ to: letter.recipient, subject: `คำตอบจดหมายจาก ${letter.siteTitle}`, message: buildQuestionAnswerSummary(answers) });
+        await recordSiteLetterResponse(siteId);
         recordLetterResponse(`${input.slug}:${visitorKey}`);
         const submissionToken = await createLetterSubmissionToken(siteId);
         ctx.res.cookie(LETTER_SUBMISSION_COOKIE, submissionToken, { ...getSessionCookieOptions(ctx.req), maxAge: letterSubmissionMaxAgeSeconds * 1_000 });
@@ -120,6 +148,8 @@ export const siteRouter = router({
   }),
   dashboard: router({
     list: protectedProcedure.query(({ ctx }) => listSitesForOwner(ctx.user.id)),
+    overview: protectedProcedure.query(({ ctx }) => getDashboardOverviewForOwner(ctx.user.id)),
+    securityOverview: protectedProcedure.query(() => getOwnerSecurityOverview()),
     create: protectedProcedure
       .input(z.object({ title: z.string().trim().min(1).max(160), slug: slugSchema }))
       .mutation(async ({ ctx, input }) => {
@@ -138,6 +168,17 @@ export const siteRouter = router({
         const result = await deleteSiteForOwner(ctx.user.id, input.slug);
         if (!result.success) throw new TRPCError({ code: "NOT_FOUND", message: "ไม่พบเว็บไซต์นี้ หรือคุณไม่มีสิทธิ์ลบ" });
         return result;
+      }),
+    clone: protectedProcedure
+      .input(cloneSiteInput)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await cloneSiteForOwner(ctx.user.id, input);
+        } catch (error) {
+          if (error instanceof Error && /duplicate|unique/i.test(error.message)) throw new TRPCError({ code: "CONFLICT", message: "ชื่อลิงก์นี้ถูกใช้งานแล้ว กรุณาเลือกชื่อใหม่" });
+          if (error instanceof Error && /ไม่พบเว็บไซต์ต้นฉบับ/i.test(error.message)) throw new TRPCError({ code: "NOT_FOUND", message: error.message });
+          throw error;
+        }
       }),
   }),
   private: router({
@@ -182,6 +223,28 @@ export const siteRouter = router({
         }
         return updateSiteSettings(site.id, { ...input, features: input.features as FeatureSettings });
       }),
+    setAvailability: protectedProcedure
+      .input(availabilityInput)
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedSite(ctx.user.id, input.slug);
+        const result = await setSiteAvailabilityForOwner(ctx.user.id, input.slug, input);
+        if (!result.success) throw new TRPCError({ code: "NOT_FOUND", message: "ไม่พบเว็บไซต์นี้ หรือคุณไม่มีสิทธิ์เข้าถึง" });
+        return result;
+      }),
+    createBackup: protectedProcedure
+      .input(siteInput)
+      .query(async ({ ctx, input }) => {
+        const backup = await createSiteBackupForOwner(ctx.user.id, input.slug);
+        if (!backup) throw new TRPCError({ code: "NOT_FOUND", message: "ไม่พบเว็บไซต์นี้ หรือคุณไม่มีสิทธิ์เข้าถึง" });
+        return backup;
+      }),
+    restoreBackup: protectedProcedure
+      .input(z.object({ slug: slugSchema, backup: backupInput }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await restoreSiteBackupForOwner(ctx.user.id, input.slug, input.backup);
+        if (!result.success) throw new TRPCError({ code: "NOT_FOUND", message: "ไม่พบเว็บไซต์นี้ หรือคุณไม่มีสิทธิ์เข้าถึง" });
+        return result;
+      }),
     sendEmail: protectedProcedure
       .input(sendEmailInput)
       .mutation(async ({ ctx, input }) => {
@@ -216,6 +279,12 @@ export const siteRouter = router({
       .mutation(async ({ ctx, input }) => {
         const site = await requireOwnedSite(ctx.user.id, input.slug);
         return deleteMediaAsset(site.id, input.id);
+      }),
+    bulkRemoveMedia: protectedProcedure
+      .input(z.object({ slug: slugSchema, ids: z.array(z.number().int().positive()).min(1).max(100) }))
+      .mutation(async ({ ctx, input }) => {
+        const site = await requireOwnedSite(ctx.user.id, input.slug);
+        return deleteMediaAssets(site.id, input.ids);
       }),
     reorderMedia: protectedProcedure
       .input(z.object({ slug: slugSchema, id: z.number().int().positive(), sortOrder: z.number().int().min(0) }))

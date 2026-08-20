@@ -71,9 +71,10 @@ export default function Home({ slug }: { slug: string }) {
     setPin(next);
     setError("");
     if (next.length === 4) verifyPin.mutate({ slug, pin: next }, {
-      onSuccess: ({ valid }) => {
+      onSuccess: (result) => {
+        const { valid } = result;
         if (valid) { setRevealDismissed(false); setUnlocked(true); setPin(""); void siteQuery.refetch(); }
-        else { setError("PIN ไม่ถูกต้อง ลองใหม่อีกครั้งนะ"); window.setTimeout(() => setPin(""), 450); }
+        else { setError("paused" in result && result.paused ? result.message || "เว็บไซต์นี้พักการแสดงผลชั่วคราว" : "PIN ไม่ถูกต้อง ลองใหม่อีกครั้งนะ"); window.setTimeout(() => setPin(""), 450); }
       },
       onError: () => { setError("ตรวจสอบ PIN ไม่สำเร็จ"); setPin(""); },
     });
