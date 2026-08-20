@@ -19,6 +19,7 @@ import {
 } from "../db";
 import { decodeDataUrl, fontMimeTypeFromFileName, isAllowedFont, isAllowedMedia, isValidPin } from "../siteUtils";
 import { protectedProcedure, router } from "../_core/trpc";
+import { sendLoveOfficeEmail } from "../email";
 
 const slugSchema = z.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
 const siteInput = z.object({ slug: slugSchema });
@@ -42,6 +43,7 @@ const settingsInput = z.object({
   pin: z.string().regex(/^\d{4}$/).optional(),
   features: featureInput,
 });
+const sendEmailInput = z.object({ slug: slugSchema, to: z.string().trim().email("กรอกอีเมลผู้รับให้ถูกต้อง").max(254), subject: z.string().trim().min(1, "กรอกหัวข้ออีเมล").max(160), message: z.string().trim().min(1, "กรอกข้อความที่ต้องการส่ง").max(5_000) });
 
 async function requireOwnedSite(ownerId: number, slug: string) {
   const site = await getOwnedSiteBySlug(ownerId, slug);
@@ -107,6 +109,12 @@ export const siteRouter = router({
       .mutation(async ({ ctx, input }) => {
         const site = await requireOwnedSite(ctx.user.id, input.slug);
         return updateSiteSettings(site.id, input);
+      }),
+    sendEmail: protectedProcedure
+      .input(sendEmailInput)
+      .mutation(async ({ ctx, input }) => {
+        await requireOwnedSite(ctx.user.id, input.slug);
+        return sendLoveOfficeEmail(input);
       }),
     uploadMedia: protectedProcedure
       .input(z.object({ slug: slugSchema, kind: z.enum(["image", "video", "audio"]), fileName: z.string().trim().min(1).max(255), dataUrl: z.string().min(20).max(3_600_000) }))

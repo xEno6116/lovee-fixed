@@ -66,7 +66,8 @@ var ENV = {
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
-  forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? ""
+  forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  resendApiKey: process.env.RESEND_API_KEY ?? ""
 };
 
 // server/githubStorage.ts
@@ -995,6 +996,29 @@ var systemRouter = router({
 // server/routers/site.ts
 import { TRPCError as TRPCError3 } from "@trpc/server";
 import { z as z2 } from "zod";
+
+// server/email.ts
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char] ?? char);
+}
+function buildLoveOfficeEmailHtml(message) {
+  return `<main style="max-width:560px;margin:0 auto;padding:32px;background:#fff7fb;color:#31202c;font-family:Arial,sans-serif"><div style="padding:28px;border:1px solid #f9a8d4;border-radius:20px;background:#fff"><p style="margin:0 0 14px;color:#db2777;font-weight:700">LoveOffice</p><div style="font-size:16px;line-height:1.75;white-space:normal">${escapeHtml(message).replace(/\n/g, "<br />")}</div></div></main>`;
+}
+async function sendLoveOfficeEmail(input, request2 = fetch) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) throw new Error("\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32 Resend API key");
+  const from = process.env.RESEND_FROM_EMAIL || "LoveOffice <onboarding@resend.dev>";
+  const response = await request2("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from, to: [input.to], subject: input.subject, text: input.message, html: buildLoveOfficeEmailHtml(input.message) })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.message || payload.name || "\u0E2A\u0E48\u0E07\u0E2D\u0E35\u0E40\u0E21\u0E25\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08");
+  return { id: payload.id ?? "" };
+}
+
+// server/routers/site.ts
 var slugSchema = z2.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "\u0E43\u0E0A\u0E49\u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23\u0E2D\u0E31\u0E07\u0E01\u0E24\u0E29 \u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 \u0E41\u0E25\u0E30\u0E02\u0E35\u0E14\u0E01\u0E25\u0E32\u0E07\u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19");
 var siteInput = z2.object({ slug: slugSchema });
 var optionalHttpUrl = z2.string().url().refine((value) => /^https?:\/\//i.test(value), "\u0E43\u0E0A\u0E49\u0E25\u0E34\u0E07\u0E01\u0E4C http \u0E2B\u0E23\u0E37\u0E2D https \u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19").or(z2.literal(""));
@@ -1032,6 +1056,7 @@ var settingsInput = z2.object({
   pin: z2.string().regex(/^\d{4}$/).optional(),
   features: featureInput
 });
+var sendEmailInput = z2.object({ slug: slugSchema, to: z2.string().trim().email("\u0E01\u0E23\u0E2D\u0E01\u0E2D\u0E35\u0E40\u0E21\u0E25\u0E1C\u0E39\u0E49\u0E23\u0E31\u0E1A\u0E43\u0E2B\u0E49\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07").max(254), subject: z2.string().trim().min(1, "\u0E01\u0E23\u0E2D\u0E01\u0E2B\u0E31\u0E27\u0E02\u0E49\u0E2D\u0E2D\u0E35\u0E40\u0E21\u0E25").max(160), message: z2.string().trim().min(1, "\u0E01\u0E23\u0E2D\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E2A\u0E48\u0E07").max(5e3) });
 async function requireOwnedSite(ownerId, slug) {
   const site = await getOwnedSiteBySlug(ownerId, slug);
   if (!site) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07" });
@@ -1081,6 +1106,10 @@ var siteRouter = router({
     saveSettings: protectedProcedure.input(settingsInput).mutation(async ({ ctx, input }) => {
       const site = await requireOwnedSite(ctx.user.id, input.slug);
       return updateSiteSettings(site.id, input);
+    }),
+    sendEmail: protectedProcedure.input(sendEmailInput).mutation(async ({ ctx, input }) => {
+      await requireOwnedSite(ctx.user.id, input.slug);
+      return sendLoveOfficeEmail(input);
     }),
     uploadMedia: protectedProcedure.input(z2.object({ slug: slugSchema, kind: z2.enum(["image", "video", "audio"]), fileName: z2.string().trim().min(1).max(255), dataUrl: z2.string().min(20).max(36e5) })).mutation(async ({ ctx, input }) => {
       const site = await requireOwnedSite(ctx.user.id, input.slug);

@@ -9,6 +9,7 @@ const verifySitePin = vi.fn(async (siteId: number, pin: string) => siteId === 9 
 const updateSiteSettings = vi.fn(async (siteId: number, input: Record<string, unknown>) => ({ id: 42, siteId, ...input }));
 const createSiteForOwner = vi.fn(async (ownerId: number, input: { title: string; slug: string }) => ({ id: 10, ownerId, ...input }));
 const deleteSiteForOwner = vi.fn(async (ownerId: number, slug: string) => ({ success: ownerId === 1 && slug === "main-memory" }));
+const sendLoveOfficeEmail = vi.fn(async () => ({ id: "email_123" }));
 
 vi.mock("../db", () => ({
   createMediaAsset: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock("../db", () => ({
   updateSiteSettings,
   verifySitePin,
 }));
+vi.mock("../email", () => ({ sendLoveOfficeEmail }));
 
 const { siteRouter } = await import("./site");
 const owner = { id: 1, role: "admin" };
@@ -56,6 +58,14 @@ describe("multi-site router", () => {
     const input = { slug: "main-memory", facebookUrl: "https://facebook.com/example", instagramUrl: "https://instagram.com/example", musicUrl: "/manus-storage/sites/9/audio/our-song.mp3", themeColor: "#2563eb", features };
     await expect(caller.admin.saveSettings(input)).resolves.toMatchObject({ id: 42, siteId: 9, themeColor: "#2563eb" });
     expect(updateSiteSettings).toHaveBeenCalledWith(9, input);
+  });
+
+  it("sends email only after resolving the site to its owner", async () => {
+    const caller = siteRouter.createCaller({ user: owner } as never);
+    await expect(caller.admin.sendEmail({ slug: "main-memory", to: "recipient@example.com", subject: "คิดถึง", message: "รักนะ" })).resolves.toEqual({ id: "email_123" });
+    expect(sendLoveOfficeEmail).toHaveBeenCalledWith(expect.objectContaining({ to: "recipient@example.com", subject: "คิดถึง" }));
+    const otherCaller = siteRouter.createCaller({ user: otherOwner } as never);
+    await expect(otherCaller.admin.sendEmail({ slug: "main-memory", to: "recipient@example.com", subject: "คิดถึง", message: "รักนะ" })).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
   it("rejects non-http social links before saving settings", async () => {
