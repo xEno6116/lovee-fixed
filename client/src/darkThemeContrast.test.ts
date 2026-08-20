@@ -14,4 +14,9 @@ describe("dark visual theme contrast", () => {
     expect(styles).toContain("color: #f8fafc !important");
     expect(styles).toContain(".legacy-question-modal textarea::placeholder { color: #c4b5fd; }");
   });
+
+  it("keeps the question-letter card dark with readable copy in dark variants", () => {
+    expect(styles).toContain(".legacy-question-letter-section { background: linear-gradient(135deg,rgba(25,16,46,.96),rgba(42,26,76,.94)); }");
+    expect(styles).toContain(".legacy-question-letter .legacy-letter-copy :is(strong,span) { color: #f8fafc !important; }");
+  });
 });
