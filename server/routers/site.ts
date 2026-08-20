@@ -90,6 +90,8 @@ export const siteRouter = router({
     submitLetterResponse: publicProcedure
       .input(letterResponseInput)
       .mutation(async ({ ctx, input }) => {
+        const siteId = await getVisitorSiteId(ctx.req);
+        if (!siteId || !(await getVisitorSiteData(siteId, input.slug))) throw new TRPCError({ code: "UNAUTHORIZED", message: "กรุณาใส่ PIN ก่อนส่งคำตอบ" });
         const visitorKey = (ctx.req.header("x-forwarded-for") || ctx.req.ip || "unknown").split(",")[0].trim();
         const inspection = inspectLetterResponse(input, `${input.slug}:${visitorKey}`);
         if (inspection.silent) return { success: true };

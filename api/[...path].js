@@ -1167,6 +1167,8 @@ var siteRouter = router({
       return recordSiteView(siteId);
     }),
     submitLetterResponse: publicProcedure.input(letterResponseInput).mutation(async ({ ctx, input }) => {
+      const siteId = await getVisitorSiteId(ctx.req);
+      if (!siteId || !await getVisitorSiteData(siteId, input.slug)) throw new TRPCError3({ code: "UNAUTHORIZED", message: "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E43\u0E2A\u0E48 PIN \u0E01\u0E48\u0E2D\u0E19\u0E2A\u0E48\u0E07\u0E04\u0E33\u0E15\u0E2D\u0E1A" });
       const visitorKey = (ctx.req.header("x-forwarded-for") || ctx.req.ip || "unknown").split(",")[0].trim();
       const inspection = inspectLetterResponse(input, `${input.slug}:${visitorKey}`);
       if (inspection.silent) return { success: true };
