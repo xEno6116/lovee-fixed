@@ -252,6 +252,10 @@ var defaultFeatureSettings = () => ({
   backgroundStyle: "soft",
   themeMode: "light",
   visualTheme: "soft-love",
+  questionLetterEnabled: false,
+  questionLetterTitle: "\u0E04\u0E33\u0E16\u0E32\u0E21\u0E16\u0E36\u0E07\u0E40\u0E18\u0E2D",
+  questionLetterPrompt: "\u0E27\u0E31\u0E19\u0E19\u0E35\u0E49\u0E2D\u0E22\u0E32\u0E01\u0E1A\u0E2D\u0E01\u0E2D\u0E30\u0E44\u0E23\u0E01\u0E31\u0E1A\u0E40\u0E23\u0E32\u0E44\u0E2B\u0E21?",
+  questionLetterRecipient: "",
   hideVideos: false,
   hideGallery: false,
   hideMessage: false,
@@ -290,8 +294,15 @@ function normalizeFeatures(settings) {
   return { ...defaultFeatureSettings(), ...settings.features ?? {} };
 }
 function toPublicFeatures(settings) {
-  const { ownerNote: _ownerNote, ...features } = normalizeFeatures(settings);
+  const { ownerNote: _ownerNote, questionLetterRecipient: _questionLetterRecipient, ...features } = normalizeFeatures(settings);
   return features;
+}
+async function getQuestionLetterBySlug(slug) {
+  const { data } = await readRepository();
+  const site = data.sites.find((item) => item.slug === slug);
+  if (!site) return void 0;
+  const features = normalizeFeatures(site.settings);
+  return { siteTitle: site.title, enabled: features.questionLetterEnabled, title: features.questionLetterTitle, prompt: features.questionLetterPrompt, recipient: features.questionLetterRecipient };
 }
 function toClientAsset({ storageKey: _storageKey, ...asset }) {
   return asset;
@@ -1018,6 +1029,21 @@ async function sendLoveOfficeEmail(input, request2 = fetch) {
   return { id: payload.id ?? "" };
 }
 
+// server/letterResponse.ts
+var lastResponseByVisitor = /* @__PURE__ */ new Map();
+var MIN_FORM_OPEN_MS = 2e3;
+var RESPONSE_COOLDOWN_MS = 6e4;
+function inspectLetterResponse(input, visitorKey, now = Date.now()) {
+  if (input.honeypot?.trim()) return { allowed: false, silent: true, reason: "" };
+  if (!Number.isFinite(input.startedAt) || now - input.startedAt < MIN_FORM_OPEN_MS) return { allowed: false, silent: false, reason: "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E2D\u0E48\u0E32\u0E19\u0E08\u0E14\u0E2B\u0E21\u0E32\u0E22\u0E2A\u0E31\u0E01\u0E04\u0E23\u0E39\u0E48\u0E01\u0E48\u0E2D\u0E19\u0E2A\u0E48\u0E07\u0E04\u0E33\u0E15\u0E2D\u0E1A" };
+  const lastResponse = lastResponseByVisitor.get(visitorKey);
+  if (lastResponse !== void 0 && now - lastResponse < RESPONSE_COOLDOWN_MS) return { allowed: false, silent: false, reason: "\u0E2A\u0E48\u0E07\u0E04\u0E33\u0E15\u0E2D\u0E1A\u0E44\u0E14\u0E49\u0E2D\u0E35\u0E01\u0E04\u0E23\u0E31\u0E49\u0E07\u0E43\u0E19\u0E2D\u0E35\u0E01\u0E2A\u0E31\u0E01\u0E04\u0E23\u0E39\u0E48\u0E19\u0E30" };
+  return { allowed: true, silent: false, reason: "" };
+}
+function recordLetterResponse(visitorKey, now = Date.now()) {
+  lastResponseByVisitor.set(visitorKey, now);
+}
+
 // server/routers/site.ts
 var slugSchema = z2.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "\u0E43\u0E0A\u0E49\u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23\u0E2D\u0E31\u0E07\u0E01\u0E24\u0E29 \u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 \u0E41\u0E25\u0E30\u0E02\u0E35\u0E14\u0E01\u0E25\u0E32\u0E07\u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19");
 var siteInput = z2.object({ slug: slugSchema });
@@ -1036,6 +1062,10 @@ var featureInput = z2.object({
   backgroundStyle: z2.enum(["soft", "sunset", "night", "paper"]),
   themeMode: z2.enum(["light", "night", "auto"]),
   visualTheme: z2.enum(["soft-love", "minimal-white", "midnight-date", "film-diary", "lavender-dream", "sunset-memory"]),
+  questionLetterEnabled: z2.boolean(),
+  questionLetterTitle: z2.string().trim().max(160),
+  questionLetterPrompt: z2.string().trim().max(1e3),
+  questionLetterRecipient: z2.string().trim().email("\u0E01\u0E23\u0E2D\u0E01\u0E2D\u0E35\u0E40\u0E21\u0E25\u0E23\u0E31\u0E1A\u0E04\u0E33\u0E15\u0E2D\u0E1A\u0E43\u0E2B\u0E49\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07").or(z2.literal("")),
   hideVideos: z2.boolean(),
   hideGallery: z2.boolean(),
   hideMessage: z2.boolean(),
@@ -1057,12 +1087,29 @@ var settingsInput = z2.object({
   features: featureInput
 });
 var sendEmailInput = z2.object({ slug: slugSchema, to: z2.string().trim().email("\u0E01\u0E23\u0E2D\u0E01\u0E2D\u0E35\u0E40\u0E21\u0E25\u0E1C\u0E39\u0E49\u0E23\u0E31\u0E1A\u0E43\u0E2B\u0E49\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07").max(254), subject: z2.string().trim().min(1, "\u0E01\u0E23\u0E2D\u0E01\u0E2B\u0E31\u0E27\u0E02\u0E49\u0E2D\u0E2D\u0E35\u0E40\u0E21\u0E25").max(160), message: z2.string().trim().min(1, "\u0E01\u0E23\u0E2D\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E2A\u0E48\u0E07").max(5e3) });
+var letterResponseInput = z2.object({ slug: slugSchema, answer: z2.string().trim().min(1, "\u0E01\u0E23\u0E2D\u0E01\u0E04\u0E33\u0E15\u0E2D\u0E1A\u0E01\u0E48\u0E2D\u0E19\u0E2A\u0E48\u0E07").max(2e3), startedAt: z2.number().finite(), honeypot: z2.string().max(100).optional() });
 async function requireOwnedSite(ownerId, slug) {
   const site = await getOwnedSiteBySlug(ownerId, slug);
   if (!site) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07" });
   return site;
 }
 var siteRouter = router({
+  public: router({
+    submitLetterResponse: publicProcedure.input(letterResponseInput).mutation(async ({ ctx, input }) => {
+      const visitorKey = (ctx.req.header("x-forwarded-for") || ctx.req.ip || "unknown").split(",")[0].trim();
+      const inspection = inspectLetterResponse(input, `${input.slug}:${visitorKey}`);
+      if (inspection.silent) return { success: true };
+      if (!inspection.allowed) throw new TRPCError3({ code: "TOO_MANY_REQUESTS", message: inspection.reason });
+      const letter = await getQuestionLetterBySlug(input.slug);
+      if (!letter?.enabled || !letter.recipient) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E08\u0E14\u0E2B\u0E21\u0E32\u0E22\u0E04\u0E33\u0E16\u0E32\u0E21\u0E19\u0E35\u0E49\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E40\u0E1B\u0E34\u0E14\u0E23\u0E31\u0E1A\u0E04\u0E33\u0E15\u0E2D\u0E1A" });
+      recordLetterResponse(`${input.slug}:${visitorKey}`);
+      await sendLoveOfficeEmail({ to: letter.recipient, subject: `\u0E04\u0E33\u0E15\u0E2D\u0E1A\u0E08\u0E14\u0E2B\u0E21\u0E32\u0E22\u0E08\u0E32\u0E01 ${letter.siteTitle}`, message: `\u0E04\u0E33\u0E16\u0E32\u0E21: ${letter.prompt}
+
+\u0E04\u0E33\u0E15\u0E2D\u0E1A\u0E17\u0E35\u0E48\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A:
+${input.answer}` });
+      return { success: true };
+    })
+  }),
   dashboard: router({
     list: protectedProcedure.query(({ ctx }) => listSitesForOwner(ctx.user.id)),
     create: protectedProcedure.input(z2.object({ title: z2.string().trim().min(1).max(160), slug: slugSchema })).mutation(async ({ ctx, input }) => {
@@ -1105,7 +1152,7 @@ var siteRouter = router({
     }),
     saveSettings: protectedProcedure.input(settingsInput).mutation(async ({ ctx, input }) => {
       const site = await requireOwnedSite(ctx.user.id, input.slug);
-      return updateSiteSettings(site.id, input);
+      return updateSiteSettings(site.id, { ...input, features: input.features });
     }),
     sendEmail: protectedProcedure.input(sendEmailInput).mutation(async ({ ctx, input }) => {
       await requireOwnedSite(ctx.user.id, input.slug);

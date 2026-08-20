@@ -6,8 +6,10 @@ import {
   deleteMediaAsset,
   deleteSiteForOwner,
   getAdminSiteData,
+  getQuestionLetterBySlug,
   getOwnedSiteBySlug,
   getPrivateSiteData,
+  type FeatureSettings,
   listMediaAssets,
   recordSiteView,
   uploadCustomFont,
@@ -18,8 +20,9 @@ import {
   verifySitePin,
 } from "../db";
 import { decodeDataUrl, fontMimeTypeFromFileName, isAllowedFont, isAllowedMedia, isValidPin } from "../siteUtils";
-import { protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { sendLoveOfficeEmail } from "../email";
+import { inspectLetterResponse, recordLetterResponse } from "../letterResponse";
 
 const slugSchema = z.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
 const siteInput = z.object({ slug: slugSchema });
@@ -30,7 +33,7 @@ const placeEntryInput = z.object({ id: z.string().min(1).max(80), name: z.string
 const storyNoteInput = z.object({ id: z.string().min(1).max(80), title: z.string().trim().min(1).max(120), body: z.string().trim().max(3000), publishAt: z.string().max(32) });
 const featureInput = z.object({
   songLabel: z.string().trim().max(120), welcomeTitle: z.string().trim().max(160), welcomeMessage: z.string().trim().max(1000),
-  fontFamily: z.enum(["gaegu", "serif", "sans"]), customFontUrl: z.string().max(2048), customFontName: z.string().max(255), backgroundStyle: z.enum(["soft", "sunset", "night", "paper"]), themeMode: z.enum(["light", "night", "auto"]), visualTheme: z.enum(["soft-love", "minimal-white", "midnight-date", "film-diary", "lavender-dream", "sunset-memory"]),
+  fontFamily: z.enum(["gaegu", "serif", "sans"]), customFontUrl: z.string().max(2048), customFontName: z.string().max(255), backgroundStyle: z.enum(["soft", "sunset", "night", "paper"]), themeMode: z.enum(["light", "night", "auto"]), visualTheme: z.enum(["soft-love", "minimal-white", "midnight-date", "film-diary", "lavender-dream", "sunset-memory"]), questionLetterEnabled: z.boolean(), questionLetterTitle: z.string().trim().max(160), questionLetterPrompt: z.string().trim().max(1_000), questionLetterRecipient: z.string().trim().email("กรอกอีเมลรับคำตอบให้ถูกต้อง").or(z.literal("")),
   hideVideos: z.boolean(), hideGallery: z.boolean(), hideMessage: z.boolean(), surpriseTitle: z.string().trim().max(160), surpriseMessage: z.string().trim().max(1500), surpriseAt: z.string().max(32),
   timeline: z.array(timelineEntryInput).max(30), places: z.array(placeEntryInput).max(20), notes: z.array(storyNoteInput).max(30), ownerNote: z.string().trim().max(3000),
 });
@@ -44,6 +47,7 @@ const settingsInput = z.object({
   features: featureInput,
 });
 const sendEmailInput = z.object({ slug: slugSchema, to: z.string().trim().email("กรอกอีเมลผู้รับให้ถูกต้อง").max(254), subject: z.string().trim().min(1, "กรอกหัวข้ออีเมล").max(160), message: z.string().trim().min(1, "กรอกข้อความที่ต้องการส่ง").max(5_000) });
+const letterResponseInput = z.object({ slug: slugSchema, answer: z.string().trim().min(1, "กรอกคำตอบก่อนส่ง").max(2_000), startedAt: z.number().finite(), honeypot: z.string().max(100).optional() });
 
 async function requireOwnedSite(ownerId: number, slug: string) {
   const site = await getOwnedSiteBySlug(ownerId, slug);
@@ -52,6 +56,21 @@ async function requireOwnedSite(ownerId: number, slug: string) {
 }
 
 export const siteRouter = router({
+  public: router({
+    submitLetterResponse: publicProcedure
+      .input(letterResponseInput)
+      .mutation(async ({ ctx, input }) => {
+        const visitorKey = (ctx.req.header("x-forwarded-for") || ctx.req.ip || "unknown").split(",")[0].trim();
+        const inspection = inspectLetterResponse(input, `${input.slug}:${visitorKey}`);
+        if (inspection.silent) return { success: true };
+        if (!inspection.allowed) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: inspection.reason });
+        const letter = await getQuestionLetterBySlug(input.slug);
+        if (!letter?.enabled || !letter.recipient) throw new TRPCError({ code: "NOT_FOUND", message: "จดหมายคำถามนี้ยังไม่เปิดรับคำตอบ" });
+        recordLetterResponse(`${input.slug}:${visitorKey}`);
+        await sendLoveOfficeEmail({ to: letter.recipient, subject: `คำตอบจดหมายจาก ${letter.siteTitle}`, message: `คำถาม: ${letter.prompt}\n\nคำตอบที่ได้รับ:\n${input.answer}` });
+        return { success: true };
+      }),
+  }),
   dashboard: router({
     list: protectedProcedure.query(({ ctx }) => listSitesForOwner(ctx.user.id)),
     create: protectedProcedure
@@ -108,7 +127,7 @@ export const siteRouter = router({
       .input(settingsInput)
       .mutation(async ({ ctx, input }) => {
         const site = await requireOwnedSite(ctx.user.id, input.slug);
-        return updateSiteSettings(site.id, input);
+        return updateSiteSettings(site.id, { ...input, features: input.features as FeatureSettings });
       }),
     sendEmail: protectedProcedure
       .input(sendEmailInput)

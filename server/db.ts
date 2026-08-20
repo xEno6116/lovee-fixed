@@ -20,6 +20,10 @@ export type FeatureSettings = {
   backgroundStyle: "soft" | "sunset" | "night" | "paper";
   themeMode: "light" | "night" | "auto";
   visualTheme: "soft-love" | "minimal-white" | "midnight-date" | "film-diary" | "lavender-dream" | "sunset-memory";
+  questionLetterEnabled: boolean;
+  questionLetterTitle: string;
+  questionLetterPrompt: string;
+  questionLetterRecipient: string;
   hideVideos: boolean;
   hideGallery: boolean;
   hideMessage: boolean;
@@ -33,7 +37,7 @@ export type FeatureSettings = {
 };
 
 const defaultFeatureSettings = (): FeatureSettings => ({
-  songLabel: "Our Song ❤️", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", customFontUrl: "", customFontName: "", backgroundStyle: "soft", themeMode: "light", visualTheme: "soft-love",
+  songLabel: "Our Song ❤️", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", customFontUrl: "", customFontName: "", backgroundStyle: "soft", themeMode: "light", visualTheme: "soft-love", questionLetterEnabled: false, questionLetterTitle: "คำถามถึงเธอ", questionLetterPrompt: "วันนี้อยากบอกอะไรกับเราไหม?", questionLetterRecipient: "",
   hideVideos: false, hideGallery: false, hideMessage: false, surpriseTitle: "", surpriseMessage: "", surpriseAt: "", timeline: [], places: [], notes: [], ownerNote: "",
 });
 
@@ -145,8 +149,16 @@ function normalizeFeatures(settings: StoredSettings): FeatureSettings {
 }
 
 function toPublicFeatures(settings: StoredSettings) {
-  const { ownerNote: _ownerNote, ...features } = normalizeFeatures(settings);
+  const { ownerNote: _ownerNote, questionLetterRecipient: _questionLetterRecipient, ...features } = normalizeFeatures(settings);
   return features;
+}
+
+export async function getQuestionLetterBySlug(slug: string) {
+  const { data } = await readRepository();
+  const site = data.sites.find((item) => item.slug === slug);
+  if (!site) return undefined;
+  const features = normalizeFeatures(site.settings);
+  return { siteTitle: site.title, enabled: features.questionLetterEnabled, title: features.questionLetterTitle, prompt: features.questionLetterPrompt, recipient: features.questionLetterRecipient };
 }
 
 function toClientAsset({ storageKey: _storageKey, ...asset }: StoredAsset): ClientAsset {
