@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 const ownedSite = { id: 9, ownerId: 1, slug: "main-memory", title: "เว็บไซต์ความทรงจำหลัก" };
-const features = { songLabel: "Our Song", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu" as const, customFontUrl: "", customFontName: "", backgroundStyle: "soft" as const, themeMode: "light" as const, visualTheme: "soft-love" as const, questionLetterEnabled: false, questionLetterTitle: "คำถามถึงเธอ", questionLetterPrompt: "วันนี้เป็นยังไงบ้าง", questionLetterRecipient: "", hideVideos: false, hideGallery: false, hideMessage: false, surpriseTitle: "", surpriseMessage: "", surpriseAt: "", timeline: [], places: [], notes: [], ownerNote: "" };
+const features = { songLabel: "Our Song", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu" as const, customFontUrl: "", customFontName: "", backgroundStyle: "soft" as const, themeMode: "light" as const, visualTheme: "soft-love" as const, questionLetterEnabled: false, questionLetterTitle: "คำถามถึงเธอ", questionLetterPrompts: [{ id: "question-1", prompt: "วันนี้เป็นยังไงบ้าง" }, { id: "question-2", prompt: "มีอะไรอยากบอกเราไหม" }], questionLetterRecipient: "", hideVideos: false, hideGallery: false, hideMessage: false, surpriseTitle: "", surpriseMessage: "", surpriseAt: "", timeline: [], places: [], notes: [], ownerNote: "" };
 const getOwnedSiteBySlug = vi.fn(async (ownerId: number, slug: string) => ownerId === 1 && slug === "main-memory" ? ownedSite : undefined);
 const getPrivateSiteData = vi.fn(async (ownerId: number, slug: string) => ownerId === 1 && slug === "main-memory" ? ({ site: ownedSite, settings: { id: 42, startDate: "2024-04-06", memoryMessage: "เทส", musicUrl: "", facebookUrl: "", instagramUrl: "", themeColor: "#ec4899" }, images: [], videos: [] }) : undefined);
 const getAdminSiteData = vi.fn(async (ownerId: number, slug: string) => ownerId === 1 && slug === "main-memory" ? ({ site: ownedSite, settings: { id: 42, siteId: 9, pinHash: "hash", startDate: "2024-04-06", memoryMessage: "เทส", musicUrl: "", facebookUrl: "", instagramUrl: "", themeColor: "#ec4899" }, assets: [] }) : undefined);
@@ -10,7 +10,7 @@ const updateSiteSettings = vi.fn(async (siteId: number, input: Record<string, un
 const createSiteForOwner = vi.fn(async (ownerId: number, input: { title: string; slug: string }) => ({ id: 10, ownerId, ...input }));
 const deleteSiteForOwner = vi.fn(async (ownerId: number, slug: string) => ({ success: ownerId === 1 && slug === "main-memory" }));
 const sendLoveOfficeEmail = vi.fn(async () => ({ id: "email_123" }));
-const getQuestionLetterBySlug = vi.fn(async (slug: string) => slug === "main-memory" ? ({ siteTitle: "เว็บไซต์ความทรงจำหลัก", enabled: true, title: "คำถามถึงเธอ", prompt: "วันนี้เป็นยังไงบ้าง", recipient: "owner@example.com" }) : undefined);
+const getQuestionLetterBySlug = vi.fn(async (slug: string) => slug === "main-memory" ? ({ siteTitle: "เว็บไซต์ความทรงจำหลัก", enabled: true, title: "คำถามถึงเธอ", prompts: features.questionLetterPrompts, recipient: "owner@example.com" }) : undefined);
 const getVisitorSiteIdBySlug = vi.fn(async (slug: string) => slug === "main-memory" ? 9 : undefined);
 const getVisitorSiteData = vi.fn(async (siteId: number, slug: string) => siteId === 9 && slug === "main-memory" ? ({ site: { id: 9, title: "เว็บไซต์ความทรงจำหลัก", slug }, settings: { id: 42, startDate: "2024-04-06", memoryMessage: "เทส", musicUrl: "", facebookUrl: "", instagramUrl: "", themeColor: "#ec4899", features: { ...features, questionLetterRecipient: undefined } }, images: [], videos: [] }) : undefined);
 const getVisitorSiteId = vi.fn(async () => 9);
@@ -36,7 +36,7 @@ vi.mock("../db", () => ({
   updateSiteSettings,
   verifySitePin,
 }));
-vi.mock("../email", () => ({ sendLoveOfficeEmail }));
+vi.mock("../email", () => ({ sendLoveOfficeEmail, buildQuestionAnswerSummary: (answers: Array<{ question: string; answer: string }>) => answers.map(({ question, answer }, index) => `คำถามข้อ ${index + 1}: ${question}\n\nคำตอบ: ${answer}`).join("\n\n──────────\n\n") }));
 vi.mock("../visitorAccess", () => ({ createVisitorAccessToken, getVisitorSiteId, visitorAccessMaxAgeSeconds: 86_400, VISITOR_ACCESS_COOKIE: "loveoffice_site_access" }));
 vi.mock("../_core/cookies", () => ({ getSessionCookieOptions: () => ({ httpOnly: true, path: "/", sameSite: "none", secure: true }) }));
 
@@ -78,10 +78,16 @@ describe("multi-site router", () => {
     await expect(otherCaller.admin.sendEmail({ slug: "main-memory", to: "recipient@example.com", subject: "คิดถึง", message: "รักนะ" })).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
-  it("forwards a public letter answer without exposing the destination email", async () => {
+  it("forwards all public letter answers in one summary email without exposing the destination email", async () => {
     const caller = siteRouter.createCaller({ user: null, req: { header: () => "203.0.113.8", ip: "203.0.113.8" } } as never);
-    await expect(caller.public.submitLetterResponse({ slug: "main-memory", answer: "คิดถึงเหมือนกัน", startedAt: Date.now() - 3_000 })).resolves.toEqual({ success: true });
-    expect(sendLoveOfficeEmail).toHaveBeenCalledWith(expect.objectContaining({ to: "owner@example.com", subject: expect.stringContaining("คำตอบจดหมาย") }));
+    await expect(caller.public.submitLetterResponse({ slug: "main-memory", answers: [{ question: "วันนี้เป็นยังไงบ้าง", answer: "คิดถึงเหมือนกัน" }, { question: "มีอะไรอยากบอกเราไหม", answer: "อยากเจอเร็ว ๆ" }], startedAt: Date.now() - 3_000 })).resolves.toEqual({ success: true });
+    expect(sendLoveOfficeEmail).toHaveBeenCalledWith(expect.objectContaining({ to: "owner@example.com", subject: expect.stringContaining("คำตอบจดหมาย"), message: expect.stringContaining("อยากเจอเร็ว ๆ") }));
+  });
+
+  it("rejects question settings beyond the ten-question limit", async () => {
+    const caller = siteRouter.createCaller({ user: owner } as never);
+    const tooManyQuestions = Array.from({ length: 11 }, (_, index) => ({ id: `q-${index}`, prompt: `คำถามข้อ ${index + 1}` }));
+    await expect(caller.admin.saveSettings({ slug: "main-memory", facebookUrl: "", instagramUrl: "", musicUrl: "", themeColor: "#ec4899", features: { ...features, questionLetterPrompts: tooManyQuestions } })).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 
   it("allows a visitor without an owner account to unlock a public site with its PIN", async () => {

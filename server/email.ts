@@ -1,4 +1,5 @@
 type SendEmailInput = { to: string; subject: string; message: string };
+type LetterAnswer = { question: string; answer: string };
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[char] ?? char);
@@ -6,6 +7,10 @@ function escapeHtml(value: string) {
 
 export function buildLoveOfficeEmailHtml(message: string) {
   return `<main style="max-width:560px;margin:0 auto;padding:32px;background:#fff7fb;color:#31202c;font-family:Arial,sans-serif"><div style="padding:28px;border:1px solid #f9a8d4;border-radius:20px;background:#fff"><p style="margin:0 0 14px;color:#db2777;font-weight:700">LoveOffice</p><div style="font-size:16px;line-height:1.75;white-space:normal">${escapeHtml(message).replace(/\n/g, "<br />")}</div></div></main>`;
+}
+
+export function buildQuestionAnswerSummary(answers: LetterAnswer[]) {
+  return answers.map(({ question, answer }, index) => `คำถามข้อ ${index + 1}: ${question}\n\nคำตอบ: ${answer}`).join("\n\n──────────\n\n");
 }
 
 export async function sendLoveOfficeEmail(input: SendEmailInput, request = fetch) {

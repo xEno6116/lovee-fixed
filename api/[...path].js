@@ -254,7 +254,7 @@ var defaultFeatureSettings = () => ({
   visualTheme: "soft-love",
   questionLetterEnabled: false,
   questionLetterTitle: "\u0E04\u0E33\u0E16\u0E32\u0E21\u0E16\u0E36\u0E07\u0E40\u0E18\u0E2D",
-  questionLetterPrompt: "\u0E27\u0E31\u0E19\u0E19\u0E35\u0E49\u0E2D\u0E22\u0E32\u0E01\u0E1A\u0E2D\u0E01\u0E2D\u0E30\u0E44\u0E23\u0E01\u0E31\u0E1A\u0E40\u0E23\u0E32\u0E44\u0E2B\u0E21?",
+  questionLetterPrompts: [],
   questionLetterRecipient: "",
   hideVideos: false,
   hideGallery: false,
@@ -290,11 +290,20 @@ function toClientSite({ settings: _settings, assets: _assets, ...site }) {
 function toClientSettings({ pinHash: _pinHash, ...settings }) {
   return settings;
 }
+function normalizeFeatureSettings(features) {
+  const normalized = { ...defaultFeatureSettings(), ...features ?? {} };
+  const prompts = Array.isArray(normalized.questionLetterPrompts) ? normalized.questionLetterPrompts.filter((item) => Boolean(item && typeof item.id === "string" && typeof item.prompt === "string")).map((item) => ({ id: item.id.trim(), prompt: item.prompt.trim() })).filter((item) => item.id && item.prompt).slice(0, 10) : [];
+  const legacyPrompt = normalized.questionLetterPrompt?.trim();
+  return {
+    ...normalized,
+    questionLetterPrompts: prompts.length ? prompts : legacyPrompt ? [{ id: "legacy-question", prompt: legacyPrompt }] : []
+  };
+}
 function normalizeFeatures(settings) {
-  return { ...defaultFeatureSettings(), ...settings.features ?? {} };
+  return normalizeFeatureSettings(settings.features);
 }
 function toPublicFeatures(settings) {
-  const { ownerNote: _ownerNote, questionLetterRecipient: _questionLetterRecipient, ...features } = normalizeFeatures(settings);
+  const { ownerNote: _ownerNote, questionLetterRecipient: _questionLetterRecipient, questionLetterPrompt: _legacyQuestionLetterPrompt, ...features } = normalizeFeatures(settings);
   return features;
 }
 function toVisitorSite(site) {
@@ -305,7 +314,7 @@ async function getQuestionLetterBySlug(slug) {
   const site = data.sites.find((item) => item.slug === slug);
   if (!site) return void 0;
   const features = normalizeFeatures(site.settings);
-  return { siteTitle: site.title, enabled: features.questionLetterEnabled, title: features.questionLetterTitle, prompt: features.questionLetterPrompt, recipient: features.questionLetterRecipient };
+  return { siteTitle: site.title, enabled: features.questionLetterEnabled, title: features.questionLetterTitle, prompts: features.questionLetterPrompts, recipient: features.questionLetterRecipient };
 }
 function toClientAsset({ storageKey: _storageKey, ...asset }) {
   return asset;
@@ -470,7 +479,7 @@ async function getAdminSiteData(ownerId, slug) {
   if (!site) return void 0;
   return {
     site: toClientSite(site),
-    settings: toClientSettings(site.settings),
+    settings: { ...toClientSettings(site.settings), features: normalizeFeatures(site.settings) },
     assets: sortAssets(site.assets).map(toClientAsset),
     storageBytes: site.assets.reduce((sum, asset) => sum + (asset.byteLength ?? 0), 0),
     viewCount: site.viewCount ?? 0,
@@ -501,7 +510,7 @@ async function updateSiteSettings(siteId, input) {
       instagramUrl: input.instagramUrl,
       themeColor: input.themeColor,
       musicUrl: input.musicUrl,
-      ...input.features ? { features: input.features } : {},
+      ...input.features ? { features: normalizeFeatureSettings(input.features) } : {},
       ...input.pin ? { pinHash: hashPin(input.pin) } : {},
       revisionLog: [{ at: now, label: "\u0E2D\u0E31\u0E1B\u0E40\u0E14\u0E15\u0E01\u0E32\u0E23\u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C" }, ...site.settings.revisionLog ?? []].slice(0, 20),
       updatedAt: now
@@ -1043,6 +1052,11 @@ function escapeHtml(value) {
 function buildLoveOfficeEmailHtml(message) {
   return `<main style="max-width:560px;margin:0 auto;padding:32px;background:#fff7fb;color:#31202c;font-family:Arial,sans-serif"><div style="padding:28px;border:1px solid #f9a8d4;border-radius:20px;background:#fff"><p style="margin:0 0 14px;color:#db2777;font-weight:700">LoveOffice</p><div style="font-size:16px;line-height:1.75;white-space:normal">${escapeHtml(message).replace(/\n/g, "<br />")}</div></div></main>`;
 }
+function buildQuestionAnswerSummary(answers) {
+  return answers.map(({ question, answer }, index) => `\u0E04\u0E33\u0E16\u0E32\u0E21\u0E02\u0E49\u0E2D ${index + 1}: ${question}
+
+\u0E04\u0E33\u0E15\u0E2D\u0E1A: ${answer}`).join("\n\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n");
+}
 async function sendLoveOfficeEmail(input, request2 = fetch) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) throw new Error("\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32 Resend API key");
@@ -1103,6 +1117,7 @@ var optionalStoredMusicUrl = z2.string().trim().max(2048).refine((value) => !val
 var timelineEntryInput = z2.object({ id: z2.string().min(1).max(80), title: z2.string().trim().min(1).max(120), date: z2.string().max(32), description: z2.string().trim().max(1e3) });
 var placeEntryInput = z2.object({ id: z2.string().min(1).max(80), name: z2.string().trim().min(1).max(120), mapUrl: optionalHttpUrl });
 var storyNoteInput = z2.object({ id: z2.string().min(1).max(80), title: z2.string().trim().min(1).max(120), body: z2.string().trim().max(3e3), publishAt: z2.string().max(32) });
+var questionEntryInput = z2.object({ id: z2.string().trim().min(1).max(80), prompt: z2.string().trim().min(1).max(500) });
 var featureInput = z2.object({
   songLabel: z2.string().trim().max(120),
   welcomeTitle: z2.string().trim().max(160),
@@ -1115,7 +1130,8 @@ var featureInput = z2.object({
   visualTheme: z2.enum(["soft-love", "minimal-white", "midnight-date", "film-diary", "lavender-dream", "sunset-memory"]),
   questionLetterEnabled: z2.boolean(),
   questionLetterTitle: z2.string().trim().max(160),
-  questionLetterPrompt: z2.string().trim().max(1e3),
+  questionLetterPrompt: z2.string().trim().max(1e3).optional(),
+  questionLetterPrompts: z2.array(questionEntryInput).max(10, "\u0E40\u0E1E\u0E34\u0E48\u0E21\u0E04\u0E33\u0E16\u0E32\u0E21\u0E44\u0E14\u0E49\u0E2A\u0E39\u0E07\u0E2A\u0E38\u0E14 10 \u0E02\u0E49\u0E2D").refine((items) => new Set(items.map((item) => item.prompt)).size === items.length, "\u0E04\u0E33\u0E16\u0E32\u0E21\u0E15\u0E49\u0E2D\u0E07\u0E44\u0E21\u0E48\u0E0B\u0E49\u0E33\u0E01\u0E31\u0E19"),
   questionLetterRecipient: z2.string().trim().email("\u0E01\u0E23\u0E2D\u0E01\u0E2D\u0E35\u0E40\u0E21\u0E25\u0E23\u0E31\u0E1A\u0E04\u0E33\u0E15\u0E2D\u0E1A\u0E43\u0E2B\u0E49\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07").or(z2.literal("")),
   hideVideos: z2.boolean(),
   hideGallery: z2.boolean(),
@@ -1138,7 +1154,12 @@ var settingsInput = z2.object({
   features: featureInput
 });
 var sendEmailInput = z2.object({ slug: slugSchema, to: z2.string().trim().email("\u0E01\u0E23\u0E2D\u0E01\u0E2D\u0E35\u0E40\u0E21\u0E25\u0E1C\u0E39\u0E49\u0E23\u0E31\u0E1A\u0E43\u0E2B\u0E49\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07").max(254), subject: z2.string().trim().min(1, "\u0E01\u0E23\u0E2D\u0E01\u0E2B\u0E31\u0E27\u0E02\u0E49\u0E2D\u0E2D\u0E35\u0E40\u0E21\u0E25").max(160), message: z2.string().trim().min(1, "\u0E01\u0E23\u0E2D\u0E01\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E01\u0E32\u0E23\u0E2A\u0E48\u0E07").max(5e3) });
-var letterResponseInput = z2.object({ slug: slugSchema, answer: z2.string().trim().min(1, "\u0E01\u0E23\u0E2D\u0E01\u0E04\u0E33\u0E15\u0E2D\u0E1A\u0E01\u0E48\u0E2D\u0E19\u0E2A\u0E48\u0E07").max(2e3), startedAt: z2.number().finite(), honeypot: z2.string().max(100).optional() });
+var letterResponseInput = z2.object({
+  slug: slugSchema,
+  answers: z2.array(z2.object({ question: z2.string().trim().min(1).max(500), answer: z2.string().trim().min(1, "\u0E01\u0E23\u0E2D\u0E01\u0E04\u0E33\u0E15\u0E2D\u0E1A\u0E01\u0E48\u0E2D\u0E19\u0E2A\u0E48\u0E07").max(2e3) })).min(1).max(10),
+  startedAt: z2.number().finite(),
+  honeypot: z2.string().max(100).optional()
+});
 async function requireOwnedSite(ownerId, slug) {
   const site = await getOwnedSiteBySlug(ownerId, slug);
   if (!site) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49 \u0E2B\u0E23\u0E37\u0E2D\u0E04\u0E38\u0E13\u0E44\u0E21\u0E48\u0E21\u0E35\u0E2A\u0E34\u0E17\u0E18\u0E34\u0E4C\u0E40\u0E02\u0E49\u0E32\u0E16\u0E36\u0E07" });
@@ -1174,12 +1195,14 @@ var siteRouter = router({
       if (inspection.silent) return { success: true };
       if (!inspection.allowed) throw new TRPCError3({ code: "TOO_MANY_REQUESTS", message: inspection.reason });
       const letter = await getQuestionLetterBySlug(input.slug);
-      if (!letter?.enabled || !letter.recipient) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E08\u0E14\u0E2B\u0E21\u0E32\u0E22\u0E04\u0E33\u0E16\u0E32\u0E21\u0E19\u0E35\u0E49\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E40\u0E1B\u0E34\u0E14\u0E23\u0E31\u0E1A\u0E04\u0E33\u0E15\u0E2D\u0E1A" });
+      if (!letter?.enabled || !letter.recipient || !letter.prompts.length) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E08\u0E14\u0E2B\u0E21\u0E32\u0E22\u0E04\u0E33\u0E16\u0E32\u0E21\u0E19\u0E35\u0E49\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E40\u0E1B\u0E34\u0E14\u0E23\u0E31\u0E1A\u0E04\u0E33\u0E15\u0E2D\u0E1A" });
+      const answerByQuestion = new Map(input.answers.map((item) => [item.question, item.answer]));
+      if (answerByQuestion.size !== letter.prompts.length || letter.prompts.some((item) => !answerByQuestion.has(item.prompt))) {
+        throw new TRPCError3({ code: "BAD_REQUEST", message: "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E15\u0E2D\u0E1A\u0E04\u0E33\u0E16\u0E32\u0E21\u0E43\u0E2B\u0E49\u0E04\u0E23\u0E1A\u0E17\u0E38\u0E01\u0E02\u0E49\u0E2D\u0E01\u0E48\u0E2D\u0E19\u0E2A\u0E48\u0E07" });
+      }
+      const answers = letter.prompts.map((item) => ({ question: item.prompt, answer: answerByQuestion.get(item.prompt) ?? "" }));
+      await sendLoveOfficeEmail({ to: letter.recipient, subject: `\u0E04\u0E33\u0E15\u0E2D\u0E1A\u0E08\u0E14\u0E2B\u0E21\u0E32\u0E22\u0E08\u0E32\u0E01 ${letter.siteTitle}`, message: buildQuestionAnswerSummary(answers) });
       recordLetterResponse(`${input.slug}:${visitorKey}`);
-      await sendLoveOfficeEmail({ to: letter.recipient, subject: `\u0E04\u0E33\u0E15\u0E2D\u0E1A\u0E08\u0E14\u0E2B\u0E21\u0E32\u0E22\u0E08\u0E32\u0E01 ${letter.siteTitle}`, message: `\u0E04\u0E33\u0E16\u0E32\u0E21: ${letter.prompt}
-
-\u0E04\u0E33\u0E15\u0E2D\u0E1A\u0E17\u0E35\u0E48\u0E44\u0E14\u0E49\u0E23\u0E31\u0E1A:
-${input.answer}` });
       return { success: true };
     })
   }),

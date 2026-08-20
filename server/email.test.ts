@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildLoveOfficeEmailHtml, sendLoveOfficeEmail } from "./email";
+import { buildLoveOfficeEmailHtml, buildQuestionAnswerSummary, sendLoveOfficeEmail } from "./email";
 
 const previousKey = process.env.RESEND_API_KEY;
 const previousFrom = process.env.RESEND_FROM_EMAIL;
@@ -13,6 +13,12 @@ describe("LoveOffice email sender", () => {
   it("escapes message content before rendering email HTML", () => {
     expect(buildLoveOfficeEmailHtml("<script>alert(1)</script>\nรักนะ")).toContain("&lt;script&gt;");
     expect(buildLoveOfficeEmailHtml("a\nb")).toContain("a<br />b");
+  });
+
+  it("creates one readable summary containing every question and answer", () => {
+    const summary = buildQuestionAnswerSummary([{ question: "ชอบอะไรในวันนี้?", answer: "ชอบที่ได้คุยกัน" }, { question: "อยากไปที่ไหน?", answer: "อยากไปทะเล" }]);
+    expect(summary).toContain("คำถามข้อ 1: ชอบอะไรในวันนี้?");
+    expect(summary).toContain("คำตอบ: อยากไปทะเล");
   });
 
   it("sends a server-side Resend request with a configured sender", async () => {

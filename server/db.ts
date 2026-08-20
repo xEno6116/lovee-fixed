@@ -10,6 +10,7 @@ type MediaKind = "image" | "video" | "audio";
 type TimelineEntry = { id: string; title: string; date: string; description: string };
 type PlaceEntry = { id: string; name: string; mapUrl: string };
 type StoryNote = { id: string; title: string; body: string; publishAt: string };
+export type QuestionEntry = { id: string; prompt: string };
 export type FeatureSettings = {
   songLabel: string;
   welcomeTitle: string;
@@ -22,7 +23,9 @@ export type FeatureSettings = {
   visualTheme: "soft-love" | "minimal-white" | "midnight-date" | "film-diary" | "lavender-dream" | "sunset-memory";
   questionLetterEnabled: boolean;
   questionLetterTitle: string;
-  questionLetterPrompt: string;
+  /** Kept only while existing GitHub JSON is migrated into questionLetterPrompts. */
+  questionLetterPrompt?: string;
+  questionLetterPrompts: QuestionEntry[];
   questionLetterRecipient: string;
   hideVideos: boolean;
   hideGallery: boolean;
@@ -37,7 +40,7 @@ export type FeatureSettings = {
 };
 
 const defaultFeatureSettings = (): FeatureSettings => ({
-  songLabel: "Our Song ❤️", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", customFontUrl: "", customFontName: "", backgroundStyle: "soft", themeMode: "light", visualTheme: "soft-love", questionLetterEnabled: false, questionLetterTitle: "คำถามถึงเธอ", questionLetterPrompt: "วันนี้อยากบอกอะไรกับเราไหม?", questionLetterRecipient: "",
+  songLabel: "Our Song ❤️", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", customFontUrl: "", customFontName: "", backgroundStyle: "soft", themeMode: "light", visualTheme: "soft-love", questionLetterEnabled: false, questionLetterTitle: "คำถามถึงเธอ", questionLetterPrompts: [], questionLetterRecipient: "",
   hideVideos: false, hideGallery: false, hideMessage: false, surpriseTitle: "", surpriseMessage: "", surpriseAt: "", timeline: [], places: [], notes: [], ownerNote: "",
 });
 
@@ -144,12 +147,28 @@ function toClientSettings({ pinHash: _pinHash, ...settings }: StoredSettings): C
   return settings;
 }
 
+function normalizeFeatureSettings(features?: Partial<FeatureSettings>): FeatureSettings {
+  const normalized = { ...defaultFeatureSettings(), ...(features ?? {}) };
+  const prompts = Array.isArray(normalized.questionLetterPrompts)
+    ? normalized.questionLetterPrompts
+      .filter((item): item is QuestionEntry => Boolean(item && typeof item.id === "string" && typeof item.prompt === "string"))
+      .map((item) => ({ id: item.id.trim(), prompt: item.prompt.trim() }))
+      .filter((item) => item.id && item.prompt)
+      .slice(0, 10)
+    : [];
+  const legacyPrompt = normalized.questionLetterPrompt?.trim();
+  return {
+    ...normalized,
+    questionLetterPrompts: prompts.length ? prompts : legacyPrompt ? [{ id: "legacy-question", prompt: legacyPrompt }] : [],
+  };
+}
+
 function normalizeFeatures(settings: StoredSettings): FeatureSettings {
-  return { ...defaultFeatureSettings(), ...(settings.features ?? {}) };
+  return normalizeFeatureSettings(settings.features);
 }
 
 function toPublicFeatures(settings: StoredSettings) {
-  const { ownerNote: _ownerNote, questionLetterRecipient: _questionLetterRecipient, ...features } = normalizeFeatures(settings);
+  const { ownerNote: _ownerNote, questionLetterRecipient: _questionLetterRecipient, questionLetterPrompt: _legacyQuestionLetterPrompt, ...features } = normalizeFeatures(settings);
   return features;
 }
 
@@ -162,7 +181,7 @@ export async function getQuestionLetterBySlug(slug: string) {
   const site = data.sites.find((item) => item.slug === slug);
   if (!site) return undefined;
   const features = normalizeFeatures(site.settings);
-  return { siteTitle: site.title, enabled: features.questionLetterEnabled, title: features.questionLetterTitle, prompt: features.questionLetterPrompt, recipient: features.questionLetterRecipient };
+  return { siteTitle: site.title, enabled: features.questionLetterEnabled, title: features.questionLetterTitle, prompts: features.questionLetterPrompts, recipient: features.questionLetterRecipient };
 }
 
 function toClientAsset({ storageKey: _storageKey, ...asset }: StoredAsset): ClientAsset {
@@ -348,7 +367,7 @@ export async function getAdminSiteData(ownerId: number, slug: string) {
   if (!site) return undefined;
   return {
     site: toClientSite(site),
-    settings: toClientSettings(site.settings),
+    settings: { ...toClientSettings(site.settings), features: normalizeFeatures(site.settings) },
     assets: sortAssets(site.assets).map(toClientAsset),
     storageBytes: site.assets.reduce((sum, asset) => sum + (asset.byteLength ?? 0), 0),
     viewCount: site.viewCount ?? 0,
@@ -382,7 +401,7 @@ export async function updateSiteSettings(siteId: number, input: { facebookUrl: s
       instagramUrl: input.instagramUrl,
       themeColor: input.themeColor,
       musicUrl: input.musicUrl,
-      ...(input.features ? { features: input.features } : {}),
+      ...(input.features ? { features: normalizeFeatureSettings(input.features) } : {}),
       ...(input.pin ? { pinHash: hashPin(input.pin) } : {}),
       revisionLog: [{ at: now, label: "อัปเดตการตั้งค่าเว็บไซต์" }, ...(site.settings.revisionLog ?? [])].slice(0, 20),
       updatedAt: now,

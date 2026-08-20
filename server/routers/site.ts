@@ -23,7 +23,7 @@ import {
 } from "../db";
 import { decodeDataUrl, fontMimeTypeFromFileName, isAllowedFont, isAllowedMedia, isValidPin } from "../siteUtils";
 import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
-import { sendLoveOfficeEmail } from "../email";
+import { buildQuestionAnswerSummary, sendLoveOfficeEmail } from "../email";
 import { inspectLetterResponse, recordLetterResponse } from "../letterResponse";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { createVisitorAccessToken, getVisitorSiteId, visitorAccessMaxAgeSeconds, VISITOR_ACCESS_COOKIE } from "../visitorAccess";
@@ -35,9 +35,10 @@ const optionalStoredMusicUrl = z.string().trim().max(2048).refine((value) => !va
 const timelineEntryInput = z.object({ id: z.string().min(1).max(80), title: z.string().trim().min(1).max(120), date: z.string().max(32), description: z.string().trim().max(1000) });
 const placeEntryInput = z.object({ id: z.string().min(1).max(80), name: z.string().trim().min(1).max(120), mapUrl: optionalHttpUrl });
 const storyNoteInput = z.object({ id: z.string().min(1).max(80), title: z.string().trim().min(1).max(120), body: z.string().trim().max(3000), publishAt: z.string().max(32) });
+const questionEntryInput = z.object({ id: z.string().trim().min(1).max(80), prompt: z.string().trim().min(1).max(500) });
 const featureInput = z.object({
   songLabel: z.string().trim().max(120), welcomeTitle: z.string().trim().max(160), welcomeMessage: z.string().trim().max(1000),
-  fontFamily: z.enum(["gaegu", "serif", "sans"]), customFontUrl: z.string().max(2048), customFontName: z.string().max(255), backgroundStyle: z.enum(["soft", "sunset", "night", "paper"]), themeMode: z.enum(["light", "night", "auto"]), visualTheme: z.enum(["soft-love", "minimal-white", "midnight-date", "film-diary", "lavender-dream", "sunset-memory"]), questionLetterEnabled: z.boolean(), questionLetterTitle: z.string().trim().max(160), questionLetterPrompt: z.string().trim().max(1_000), questionLetterRecipient: z.string().trim().email("กรอกอีเมลรับคำตอบให้ถูกต้อง").or(z.literal("")),
+  fontFamily: z.enum(["gaegu", "serif", "sans"]), customFontUrl: z.string().max(2048), customFontName: z.string().max(255), backgroundStyle: z.enum(["soft", "sunset", "night", "paper"]), themeMode: z.enum(["light", "night", "auto"]), visualTheme: z.enum(["soft-love", "minimal-white", "midnight-date", "film-diary", "lavender-dream", "sunset-memory"]), questionLetterEnabled: z.boolean(), questionLetterTitle: z.string().trim().max(160), questionLetterPrompt: z.string().trim().max(1_000).optional(), questionLetterPrompts: z.array(questionEntryInput).max(10, "เพิ่มคำถามได้สูงสุด 10 ข้อ").refine((items) => new Set(items.map((item) => item.prompt)).size === items.length, "คำถามต้องไม่ซ้ำกัน"), questionLetterRecipient: z.string().trim().email("กรอกอีเมลรับคำตอบให้ถูกต้อง").or(z.literal("")),
   hideVideos: z.boolean(), hideGallery: z.boolean(), hideMessage: z.boolean(), surpriseTitle: z.string().trim().max(160), surpriseMessage: z.string().trim().max(1500), surpriseAt: z.string().max(32),
   timeline: z.array(timelineEntryInput).max(30), places: z.array(placeEntryInput).max(20), notes: z.array(storyNoteInput).max(30), ownerNote: z.string().trim().max(3000),
 });
@@ -51,7 +52,12 @@ const settingsInput = z.object({
   features: featureInput,
 });
 const sendEmailInput = z.object({ slug: slugSchema, to: z.string().trim().email("กรอกอีเมลผู้รับให้ถูกต้อง").max(254), subject: z.string().trim().min(1, "กรอกหัวข้ออีเมล").max(160), message: z.string().trim().min(1, "กรอกข้อความที่ต้องการส่ง").max(5_000) });
-const letterResponseInput = z.object({ slug: slugSchema, answer: z.string().trim().min(1, "กรอกคำตอบก่อนส่ง").max(2_000), startedAt: z.number().finite(), honeypot: z.string().max(100).optional() });
+const letterResponseInput = z.object({
+  slug: slugSchema,
+  answers: z.array(z.object({ question: z.string().trim().min(1).max(500), answer: z.string().trim().min(1, "กรอกคำตอบก่อนส่ง").max(2_000) })).min(1).max(10),
+  startedAt: z.number().finite(),
+  honeypot: z.string().max(100).optional(),
+});
 
 async function requireOwnedSite(ownerId: number, slug: string) {
   const site = await getOwnedSiteBySlug(ownerId, slug);
@@ -97,9 +103,14 @@ export const siteRouter = router({
         if (inspection.silent) return { success: true };
         if (!inspection.allowed) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: inspection.reason });
         const letter = await getQuestionLetterBySlug(input.slug);
-        if (!letter?.enabled || !letter.recipient) throw new TRPCError({ code: "NOT_FOUND", message: "จดหมายคำถามนี้ยังไม่เปิดรับคำตอบ" });
+        if (!letter?.enabled || !letter.recipient || !letter.prompts.length) throw new TRPCError({ code: "NOT_FOUND", message: "จดหมายคำถามนี้ยังไม่เปิดรับคำตอบ" });
+        const answerByQuestion = new Map(input.answers.map((item) => [item.question, item.answer]));
+        if (answerByQuestion.size !== letter.prompts.length || letter.prompts.some((item) => !answerByQuestion.has(item.prompt))) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "กรุณาตอบคำถามให้ครบทุกข้อก่อนส่ง" });
+        }
+        const answers = letter.prompts.map((item) => ({ question: item.prompt, answer: answerByQuestion.get(item.prompt) ?? "" }));
+        await sendLoveOfficeEmail({ to: letter.recipient, subject: `คำตอบจดหมายจาก ${letter.siteTitle}`, message: buildQuestionAnswerSummary(answers) });
         recordLetterResponse(`${input.slug}:${visitorKey}`);
-        await sendLoveOfficeEmail({ to: letter.recipient, subject: `คำตอบจดหมายจาก ${letter.siteTitle}`, message: `คำถาม: ${letter.prompt}\n\nคำตอบที่ได้รับ:\n${input.answer}` });
         return { success: true };
       }),
   }),
