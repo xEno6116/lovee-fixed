@@ -11,6 +11,10 @@ const createSiteForOwner = vi.fn(async (ownerId: number, input: { title: string;
 const deleteSiteForOwner = vi.fn(async (ownerId: number, slug: string) => ({ success: ownerId === 1 && slug === "main-memory" }));
 const sendLoveOfficeEmail = vi.fn(async () => ({ id: "email_123" }));
 const getQuestionLetterBySlug = vi.fn(async (slug: string) => slug === "main-memory" ? ({ siteTitle: "เว็บไซต์ความทรงจำหลัก", enabled: true, title: "คำถามถึงเธอ", prompt: "วันนี้เป็นยังไงบ้าง", recipient: "owner@example.com" }) : undefined);
+const getVisitorSiteIdBySlug = vi.fn(async (slug: string) => slug === "main-memory" ? 9 : undefined);
+const getVisitorSiteData = vi.fn(async (siteId: number, slug: string) => siteId === 9 && slug === "main-memory" ? ({ site: { id: 9, title: "เว็บไซต์ความทรงจำหลัก", slug }, settings: { id: 42, startDate: "2024-04-06", memoryMessage: "เทส", musicUrl: "", facebookUrl: "", instagramUrl: "", themeColor: "#ec4899", features: { ...features, questionLetterRecipient: undefined } }, images: [], videos: [] }) : undefined);
+const getVisitorSiteId = vi.fn(async () => 9);
+const createVisitorAccessToken = vi.fn(async () => "signed-visitor-token");
 
 vi.mock("../db", () => ({
   createMediaAsset: vi.fn(),
@@ -19,6 +23,8 @@ vi.mock("../db", () => ({
   deleteSiteForOwner,
   getAdminSiteData,
   getQuestionLetterBySlug,
+  getVisitorSiteData,
+  getVisitorSiteIdBySlug,
   getOwnedSiteBySlug,
   getPrivateSiteData,
   listMediaAssets: vi.fn(async () => []),
@@ -31,6 +37,8 @@ vi.mock("../db", () => ({
   verifySitePin,
 }));
 vi.mock("../email", () => ({ sendLoveOfficeEmail }));
+vi.mock("../visitorAccess", () => ({ createVisitorAccessToken, getVisitorSiteId, visitorAccessMaxAgeSeconds: 86_400, VISITOR_ACCESS_COOKIE: "loveoffice_site_access" }));
+vi.mock("../_core/cookies", () => ({ getSessionCookieOptions: () => ({ httpOnly: true, path: "/", sameSite: "none", secure: true }) }));
 
 const { siteRouter } = await import("./site");
 const owner = { id: 1, role: "admin" };
@@ -74,6 +82,15 @@ describe("multi-site router", () => {
     const caller = siteRouter.createCaller({ user: null, req: { header: () => "203.0.113.8", ip: "203.0.113.8" } } as never);
     await expect(caller.public.submitLetterResponse({ slug: "main-memory", answer: "คิดถึงเหมือนกัน", startedAt: Date.now() - 3_000 })).resolves.toEqual({ success: true });
     expect(sendLoveOfficeEmail).toHaveBeenCalledWith(expect.objectContaining({ to: "owner@example.com", subject: expect.stringContaining("คำตอบจดหมาย") }));
+  });
+
+  it("allows a visitor without an owner account to unlock a public site with its PIN", async () => {
+    const response = { cookie: vi.fn() };
+    const caller = siteRouter.createCaller({ user: null, req: { header: () => "", headers: {} }, res: response } as never);
+    await expect(caller.public.unlock({ slug: "main-memory", pin: "0000" })).resolves.toEqual({ valid: true });
+    await expect(caller.public.get({ slug: "main-memory" })).resolves.toMatchObject({ site: { slug: "main-memory" } });
+    expect(response.cookie).toHaveBeenCalledWith("loveoffice_site_access", "signed-visitor-token", expect.objectContaining({ httpOnly: true }));
+    expect(getVisitorSiteData.mock.results.at(-1)?.value).toBeDefined();
   });
 
   it("rejects non-http social links before saving settings", async () => {

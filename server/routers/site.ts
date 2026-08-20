@@ -9,6 +9,8 @@ import {
   getQuestionLetterBySlug,
   getOwnedSiteBySlug,
   getPrivateSiteData,
+  getVisitorSiteData,
+  getVisitorSiteIdBySlug,
   type FeatureSettings,
   listMediaAssets,
   recordSiteView,
@@ -23,6 +25,8 @@ import { decodeDataUrl, fontMimeTypeFromFileName, isAllowedFont, isAllowedMedia,
 import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { sendLoveOfficeEmail } from "../email";
 import { inspectLetterResponse, recordLetterResponse } from "../letterResponse";
+import { getSessionCookieOptions } from "../_core/cookies";
+import { createVisitorAccessToken, getVisitorSiteId, visitorAccessMaxAgeSeconds, VISITOR_ACCESS_COOKIE } from "../visitorAccess";
 
 const slugSchema = z.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
 const siteInput = z.object({ slug: slugSchema });
@@ -57,6 +61,32 @@ async function requireOwnedSite(ownerId: number, slug: string) {
 
 export const siteRouter = router({
   public: router({
+    get: publicProcedure
+      .input(siteInput)
+      .query(async ({ ctx, input }) => {
+        const siteId = await getVisitorSiteId(ctx.req);
+        if (!siteId) throw new TRPCError({ code: "UNAUTHORIZED", message: "กรุณาใส่ PIN เพื่อเปิดความทรงจำ" });
+        const data = await getVisitorSiteData(siteId, input.slug);
+        if (!data) throw new TRPCError({ code: "NOT_FOUND", message: "ไม่พบเว็บไซต์นี้" });
+        return data;
+      }),
+    unlock: publicProcedure
+      .input(z.object({ slug: slugSchema, pin: z.string() }))
+      .mutation(async ({ ctx, input }) => {
+        if (!isValidPin(input.pin)) return { valid: false };
+        const siteId = await getVisitorSiteIdBySlug(input.slug);
+        if (!siteId || !(await verifySitePin(siteId, input.pin))) return { valid: false };
+        const token = await createVisitorAccessToken(siteId);
+        ctx.res.cookie(VISITOR_ACCESS_COOKIE, token, { ...getSessionCookieOptions(ctx.req), maxAge: visitorAccessMaxAgeSeconds * 1_000 });
+        return { valid: true };
+      }),
+    recordView: publicProcedure
+      .input(siteInput)
+      .mutation(async ({ ctx, input }) => {
+        const siteId = await getVisitorSiteId(ctx.req);
+        if (!siteId || !(await getVisitorSiteData(siteId, input.slug))) throw new TRPCError({ code: "UNAUTHORIZED", message: "ไม่พบสิทธิ์เข้าถึงเว็บไซต์" });
+        return recordSiteView(siteId);
+      }),
     submitLetterResponse: publicProcedure
       .input(letterResponseInput)
       .mutation(async ({ ctx, input }) => {

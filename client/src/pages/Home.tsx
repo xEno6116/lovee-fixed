@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { BookHeart, ChevronLeft, ChevronRight, Expand, Facebook, Heart, Instagram, MailOpen, MapPin, Pause, Play, QrCode, Send, Share2, Shuffle, Sparkles, Video, X } from "lucide-react";
 import QRCode from "qrcode";
-import { useAuth } from "@/_core/hooks/useAuth";
-import { OwnerLoginButton } from "@/components/OwnerLoginModal";
 import { trpc } from "@/lib/trpc";
 import { createFloatingHeart, type FloatingHeart } from "@/heartEffect";
 import { buildCustomFontFace } from "@/fontFace";
@@ -22,10 +20,9 @@ function ClockBox({ value, label }: { value: number; label: string }) {
 }
 
 export default function Home({ slug }: { slug: string }) {
-  const { isAuthenticated, loading } = useAuth();
-  const siteQuery = trpc.site.private.get.useQuery({ slug }, { enabled: isAuthenticated });
-  const verifyPin = trpc.site.private.verifyPin.useMutation();
-  const recordView = trpc.site.private.recordView.useMutation();
+  const siteQuery = trpc.site.public.get.useQuery({ slug }, { enabled: true, retry: false });
+  const verifyPin = trpc.site.public.unlock.useMutation();
+  const recordView = trpc.site.public.recordView.useMutation();
   const submitLetterResponse = trpc.site.public.submitLetterResponse.useMutation({ onSuccess: () => { setQuestionAnswer(""); setQuestionStatus("ส่งคำตอบถึงเราแล้ว ขอบคุณนะ 💌"); }, onError: (result) => setQuestionStatus(result.message || "ส่งคำตอบไม่สำเร็จ") });
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
@@ -71,7 +68,7 @@ export default function Home({ slug }: { slug: string }) {
     setError("");
     if (next.length === 4) verifyPin.mutate({ slug, pin: next }, {
       onSuccess: ({ valid }) => {
-        if (valid) { setRevealDismissed(false); setUnlocked(true); setPin(""); }
+        if (valid) { setRevealDismissed(false); setUnlocked(true); setPin(""); void siteQuery.refetch(); }
         else { setError("PIN ไม่ถูกต้อง ลองใหม่อีกครั้งนะ"); window.setTimeout(() => setPin(""), 450); }
       },
       onError: () => { setError("ตรวจสอบ PIN ไม่สำเร็จ"); setPin(""); },
@@ -93,8 +90,7 @@ export default function Home({ slug }: { slug: string }) {
     window.setTimeout(() => setFloatingHearts((items) => items.filter((item) => item.id !== heart.id)), 1_250);
   };
 
-  if (loading) return <div className="legacy-loading">กำลังตรวจสอบสิทธิ์การเข้าถึง…</div>;
-  if (!isAuthenticated) return <div className="legacy-loading"><div className="text-center"><p>เว็บไซต์นี้เป็นส่วนตัวสำหรับเจ้าของเท่านั้น</p><OwnerLoginButton className="legacy-save-btn mt-5">เข้าสู่ระบบเจ้าของ</OwnerLoginButton></div></div>;
+  if (!unlocked) return <div className="legacy-anniversary min-h-screen legacy-bg-soft"><section className="legacy-lock-screen"><div className="mb-10 text-center"><h2>LoveOffice</h2><p>ใส่ PIN เพื่อเปิดความทรงจำ</p></div><div className="legacy-dots" aria-label="PIN progress">{Array.from({ length: 4 }, (_, index) => <span key={index} className={index < pin.length ? "active" : ""} />)}</div><div className="legacy-keypad">{Array.from({ length: 9 }, (_, index) => <button type="button" key={index + 1} className="legacy-key-btn" onClick={() => pressNumber(String(index + 1))}>{index + 1}</button>)}<span /><button type="button" className="legacy-key-btn" onClick={() => pressNumber("0")}>0</button><button type="button" className="legacy-key-btn soft" onClick={() => setPin((value) => value.slice(0, -1))} aria-label="ลบตัวเลข">←</button></div><p className="legacy-lock-error">{verifyPin.isPending ? "กำลังตรวจสอบ…" : error}</p></section></div>;
   if (siteQuery.isLoading) return <div className="legacy-loading">กำลังเปิดความทรงจำ…</div>;
   if (!site) return <div className="legacy-loading">ไม่สามารถเปิดเว็บไซต์นี้ได้</div>;
 

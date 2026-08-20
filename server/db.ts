@@ -153,6 +153,10 @@ function toPublicFeatures(settings: StoredSettings) {
   return features;
 }
 
+function toVisitorSite(site: StoredSite) {
+  return { id: site.id, title: site.title, slug: site.slug };
+}
+
 export async function getQuestionLetterBySlug(slug: string) {
   const { data } = await readRepository();
   const site = data.sites.find((item) => item.slug === slug);
@@ -297,6 +301,33 @@ export async function getPrivateSiteData(ownerId: number, slug: string) {
   const assets = sortAssets(site.assets);
   return {
     site: toClientSite(site),
+    settings: {
+      id: site.settings.id,
+      startDate: site.settings.startDate,
+      memoryMessage: site.settings.memoryMessage,
+      musicUrl: site.settings.musicUrl,
+      facebookUrl: site.settings.facebookUrl ?? "",
+      instagramUrl: site.settings.instagramUrl ?? "",
+      themeColor: site.settings.themeColor ?? "#ec4899",
+      features: toPublicFeatures(site.settings),
+    },
+    images: assets.filter((asset) => asset.kind === "image").map(toClientAsset),
+    videos: assets.filter((asset) => asset.kind === "video").map(toClientAsset),
+  };
+}
+
+export async function getVisitorSiteIdBySlug(slug: string) {
+  const { data } = await readRepository();
+  return data.sites.find((site) => site.slug === slug)?.id;
+}
+
+export async function getVisitorSiteData(siteId: number, slug: string) {
+  const { data } = await readRepository();
+  const site = data.sites.find((item) => item.id === siteId && item.slug === slug);
+  if (!site) return undefined;
+  const assets = sortAssets(site.assets);
+  return {
+    site: toVisitorSite(site),
     settings: {
       id: site.settings.id,
       startDate: site.settings.startDate,
