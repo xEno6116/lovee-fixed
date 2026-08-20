@@ -29,4 +29,11 @@ describe("LoveOffice email sender", () => {
     await expect(sendLoveOfficeEmail({ to: "recipient@example.com", subject: "ถึงเธอ", message: "คิดถึงนะ" }, request as typeof fetch)).resolves.toEqual({ id: "email_123" });
     expect(request).toHaveBeenCalledWith("https://api.resend.com/emails", expect.objectContaining({ method: "POST", headers: expect.objectContaining({ Authorization: "Bearer re_test" }) }));
   });
+
+  it("authenticates the configured Resend key through the read-only domains endpoint", async () => {
+    const key = process.env.RESEND_API_KEY;
+    expect(key).toMatch(/^re_[A-Za-z0-9_]+$/);
+    const response = await fetch("https://api.resend.com/domains", { headers: { Authorization: `Bearer ${key}` } });
+    expect(response.ok).toBe(true);
+  }, 15_000);
 });
