@@ -87,6 +87,11 @@ export default function Home({ slug }: { slug: string }) {
     audio.currentTime = 0;
     try { await audio.play(); } catch { setPlaying(false); }
   };
+  const startMusicAfterWelcome = async () => {
+    const audio = audioRef.current;
+    if (!audio || !site?.settings.musicUrl || !audio.paused) return;
+    try { await audio.play(); } catch { setPlaying(false); }
+  };
   const startPlayerDrag = (event: React.PointerEvent<HTMLDivElement>) => { playerDragRef.current = { startX: event.clientX, startY: event.clientY, baseX: playerPosition.x, baseY: playerPosition.y }; event.currentTarget.setPointerCapture(event.pointerId); };
   const movePlayer = (event: React.PointerEvent<HTMLDivElement>) => { const drag = playerDragRef.current; if (!drag) return; setPlayerPosition({ x: drag.baseX + event.clientX - drag.startX, y: drag.baseY + event.clientY - drag.startY }); };
   const endPlayerDrag = () => { playerDragRef.current = null; };
@@ -119,7 +124,7 @@ export default function Home({ slug }: { slug: string }) {
   const revealContent = getRevealContent({ siteTitle: site.site.title, welcomeTitle: features.welcomeTitle, welcomeMessage: features.welcomeMessage, memoryMessage: site.settings.memoryMessage });
   const playerStyle = { "--legacy-player-x": `${playerPosition.x}px`, "--legacy-player-y": `${playerPosition.y}px` } as CSSProperties & { "--legacy-player-x": string; "--legacy-player-y": string };
   const share = async () => { const data = { title: site.site.title, text: "เว็บไซต์ความทรงจำของเรา", url: window.location.href }; try { if (navigator.share) await navigator.share(data); else { await navigator.clipboard.writeText(data.url); window.alert("คัดลอกลิงก์แล้ว"); } } catch { /* User cancelled sharing. */ } };
-  const openMemory = (event: React.MouseEvent<HTMLButtonElement>) => { launchHeart(event); setRevealDismissed(true); };
+  const openMemory = (event: React.MouseEvent<HTMLButtonElement>) => { launchHeart(event); void startMusicAfterWelcome(); setRevealDismissed(true); };
   const showNextNote = () => { if (visibleNotes.length > 1) setNoteIndex((index) => nextMemoryIndex(index, visibleNotes.length)); };
   const openQuestionLetter = () => { if (questionLetterLocked) return; questionOpenedAt.current = Date.now(); setQuestionOpened(true); setQuestionStatus(""); };
   const allQuestionsAnswered = questionPrompts.length > 0 && questionPrompts.every((item) => Boolean(questionAnswers[item.id]?.trim()));

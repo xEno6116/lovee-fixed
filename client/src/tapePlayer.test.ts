@@ -11,6 +11,12 @@ describe("cassette music player", () => {
     expect(home).toContain("aria-label=\"เริ่มเพลงใหม่\"");
   });
 
+  it("starts the uploaded song after the visitor presses the open-memory button", () => {
+    expect(home).toContain("const startMusicAfterWelcome = async () =>");
+    expect(home).toContain("void startMusicAfterWelcome();");
+    expect(home).toContain("!site?.settings.musicUrl || !audio.paused");
+  });
+
   it("spins cassette reels only while music is playing and honors reduced motion", () => {
     expect(styles).toContain(".legacy-tape-player.playing .legacy-tape-reel { animation: legacy-tape-reel-spin");
     expect(styles).toContain(".legacy-cd-disc, .legacy-cd-disc::after, .legacy-cd-case, .legacy-tape-reel { animation: none !important; }");
