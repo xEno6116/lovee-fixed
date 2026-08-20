@@ -1080,12 +1080,17 @@ function recordLetterResponse(visitorKey, now = Date.now()) {
 import { parse as parseCookieHeader2 } from "cookie";
 import { SignJWT as SignJWT2, jwtVerify as jwtVerify2 } from "jose";
 var VISITOR_ACCESS_COOKIE = "loveoffice_site_access";
+var LETTER_SUBMISSION_COOKIE = "loveoffice_letter_submitted";
 var VISITOR_ACCESS_MS = 24 * 60 * 60 * 1e3;
+var LETTER_SUBMISSION_MS = 365 * 24 * 60 * 60 * 1e3;
 function secret() {
   return new TextEncoder().encode(ENV.cookieSecret);
 }
 async function createVisitorAccessToken(siteId, now = Date.now()) {
   return new SignJWT2({ siteId, scope: "public-site" }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setExpirationTime(Math.floor((now + VISITOR_ACCESS_MS) / 1e3)).sign(secret());
+}
+async function createLetterSubmissionToken(siteId, now = Date.now()) {
+  return new SignJWT2({ siteId, scope: "letter-submitted" }).setProtectedHeader({ alg: "HS256", typ: "JWT" }).setExpirationTime(Math.floor((now + LETTER_SUBMISSION_MS) / 1e3)).sign(secret());
 }
 async function getVisitorSiteId(req) {
   const token = parseCookieHeader2(req.headers.cookie ?? "")[VISITOR_ACCESS_COOKIE];
@@ -1097,7 +1102,18 @@ async function getVisitorSiteId(req) {
     return null;
   }
 }
+async function hasSubmittedLetter(req, siteId) {
+  const token = parseCookieHeader2(req.headers.cookie ?? "")[LETTER_SUBMISSION_COOKIE];
+  if (!token) return false;
+  try {
+    const { payload } = await jwtVerify2(token, secret(), { algorithms: ["HS256"] });
+    return payload.scope === "letter-submitted" && payload.siteId === siteId;
+  } catch {
+    return false;
+  }
+}
 var visitorAccessMaxAgeSeconds = Math.floor(VISITOR_ACCESS_MS / 1e3);
+var letterSubmissionMaxAgeSeconds = Math.floor(LETTER_SUBMISSION_MS / 1e3);
 
 // server/routers/site.ts
 var slugSchema = z2.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "\u0E43\u0E0A\u0E49\u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23\u0E2D\u0E31\u0E07\u0E01\u0E24\u0E29 \u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 \u0E41\u0E25\u0E30\u0E02\u0E35\u0E14\u0E01\u0E25\u0E32\u0E07\u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19");
@@ -1162,7 +1178,7 @@ var siteRouter = router({
       if (!siteId) throw new TRPCError3({ code: "UNAUTHORIZED", message: "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E43\u0E2A\u0E48 PIN \u0E40\u0E1E\u0E37\u0E48\u0E2D\u0E40\u0E1B\u0E34\u0E14\u0E04\u0E27\u0E32\u0E21\u0E17\u0E23\u0E07\u0E08\u0E33" });
       const data = await getVisitorSiteData(siteId, input.slug);
       if (!data) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49" });
-      return data;
+      return { ...data, letterSubmitted: await hasSubmittedLetter(ctx.req, siteId) };
     }),
     unlock: publicProcedure.input(z2.object({ slug: slugSchema, pin: z2.string() })).mutation(async ({ ctx, input }) => {
       if (!isValidPin(input.pin)) return { valid: false };
@@ -1180,6 +1196,7 @@ var siteRouter = router({
     submitLetterResponse: publicProcedure.input(letterResponseInput).mutation(async ({ ctx, input }) => {
       const siteId = await getVisitorSiteId(ctx.req);
       if (!siteId || !await getVisitorSiteData(siteId, input.slug)) throw new TRPCError3({ code: "UNAUTHORIZED", message: "\u0E01\u0E23\u0E38\u0E13\u0E32\u0E43\u0E2A\u0E48 PIN \u0E01\u0E48\u0E2D\u0E19\u0E2A\u0E48\u0E07\u0E04\u0E33\u0E15\u0E2D\u0E1A" });
+      if (await hasSubmittedLetter(ctx.req, siteId)) return { success: true, alreadySubmitted: true };
       const visitorKey = (ctx.req.header("x-forwarded-for") || ctx.req.ip || "unknown").split(",")[0].trim();
       const inspection = inspectLetterResponse(input, `${input.slug}:${visitorKey}`);
       if (inspection.silent) return { success: true };
@@ -1193,7 +1210,9 @@ var siteRouter = router({
       const answers = letter.prompts.map((item) => ({ question: item.prompt, answer: answerByQuestion.get(item.prompt) ?? "" }));
       await sendLoveOfficeEmail({ to: letter.recipient, subject: `\u0E04\u0E33\u0E15\u0E2D\u0E1A\u0E08\u0E14\u0E2B\u0E21\u0E32\u0E22\u0E08\u0E32\u0E01 ${letter.siteTitle}`, message: buildQuestionAnswerSummary(answers) });
       recordLetterResponse(`${input.slug}:${visitorKey}`);
-      return { success: true };
+      const submissionToken = await createLetterSubmissionToken(siteId);
+      ctx.res.cookie(LETTER_SUBMISSION_COOKIE, submissionToken, { ...getSessionCookieOptions(ctx.req), maxAge: letterSubmissionMaxAgeSeconds * 1e3 });
+      return { success: true, alreadySubmitted: false };
     })
   }),
   dashboard: router({

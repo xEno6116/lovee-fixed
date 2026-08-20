@@ -26,7 +26,7 @@ import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { buildQuestionAnswerSummary, sendLoveOfficeEmail } from "../email";
 import { inspectLetterResponse, recordLetterResponse } from "../letterResponse";
 import { getSessionCookieOptions } from "../_core/cookies";
-import { createVisitorAccessToken, getVisitorSiteId, visitorAccessMaxAgeSeconds, VISITOR_ACCESS_COOKIE } from "../visitorAccess";
+import { createLetterSubmissionToken, createVisitorAccessToken, getVisitorSiteId, hasSubmittedLetter, letterSubmissionMaxAgeSeconds, visitorAccessMaxAgeSeconds, LETTER_SUBMISSION_COOKIE, VISITOR_ACCESS_COOKIE } from "../visitorAccess";
 
 const slugSchema = z.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
 const siteInput = z.object({ slug: slugSchema });
@@ -74,7 +74,7 @@ export const siteRouter = router({
         if (!siteId) throw new TRPCError({ code: "UNAUTHORIZED", message: "กรุณาใส่ PIN เพื่อเปิดความทรงจำ" });
         const data = await getVisitorSiteData(siteId, input.slug);
         if (!data) throw new TRPCError({ code: "NOT_FOUND", message: "ไม่พบเว็บไซต์นี้" });
-        return data;
+        return { ...data, letterSubmitted: await hasSubmittedLetter(ctx.req, siteId) };
       }),
     unlock: publicProcedure
       .input(z.object({ slug: slugSchema, pin: z.string() }))
@@ -98,6 +98,7 @@ export const siteRouter = router({
       .mutation(async ({ ctx, input }) => {
         const siteId = await getVisitorSiteId(ctx.req);
         if (!siteId || !(await getVisitorSiteData(siteId, input.slug))) throw new TRPCError({ code: "UNAUTHORIZED", message: "กรุณาใส่ PIN ก่อนส่งคำตอบ" });
+        if (await hasSubmittedLetter(ctx.req, siteId)) return { success: true, alreadySubmitted: true };
         const visitorKey = (ctx.req.header("x-forwarded-for") || ctx.req.ip || "unknown").split(",")[0].trim();
         const inspection = inspectLetterResponse(input, `${input.slug}:${visitorKey}`);
         if (inspection.silent) return { success: true };
@@ -111,7 +112,9 @@ export const siteRouter = router({
         const answers = letter.prompts.map((item) => ({ question: item.prompt, answer: answerByQuestion.get(item.prompt) ?? "" }));
         await sendLoveOfficeEmail({ to: letter.recipient, subject: `คำตอบจดหมายจาก ${letter.siteTitle}`, message: buildQuestionAnswerSummary(answers) });
         recordLetterResponse(`${input.slug}:${visitorKey}`);
-        return { success: true };
+        const submissionToken = await createLetterSubmissionToken(siteId);
+        ctx.res.cookie(LETTER_SUBMISSION_COOKIE, submissionToken, { ...getSessionCookieOptions(ctx.req), maxAge: letterSubmissionMaxAgeSeconds * 1_000 });
+        return { success: true, alreadySubmitted: false };
       }),
   }),
   dashboard: router({

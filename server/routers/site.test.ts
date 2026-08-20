@@ -15,6 +15,8 @@ const getVisitorSiteIdBySlug = vi.fn(async (slug: string) => slug === "main-memo
 const getVisitorSiteData = vi.fn(async (siteId: number, slug: string) => siteId === 9 && slug === "main-memory" ? ({ site: { id: 9, title: "เว็บไซต์ความทรงจำหลัก", slug }, settings: { id: 42, startDate: "2024-04-06", memoryMessage: "เทส", musicUrl: "", facebookUrl: "", instagramUrl: "", themeColor: "#ec4899", features: { ...features, questionLetterRecipient: undefined } }, images: [], videos: [] }) : undefined);
 const getVisitorSiteId = vi.fn(async () => 9);
 const createVisitorAccessToken = vi.fn(async () => "signed-visitor-token");
+const createLetterSubmissionToken = vi.fn(async () => "signed-letter-token");
+const hasSubmittedLetter = vi.fn(async () => false);
 
 vi.mock("../db", () => ({
   createMediaAsset: vi.fn(),
@@ -37,7 +39,7 @@ vi.mock("../db", () => ({
   verifySitePin,
 }));
 vi.mock("../email", () => ({ sendLoveOfficeEmail, buildQuestionAnswerSummary: (answers: Array<{ question: string; answer: string }>) => answers.map(({ question, answer }, index) => `คำถามข้อ ${index + 1}: ${question}\n\nคำตอบ: ${answer}`).join("\n\n──────────\n\n") }));
-vi.mock("../visitorAccess", () => ({ createVisitorAccessToken, getVisitorSiteId, visitorAccessMaxAgeSeconds: 86_400, VISITOR_ACCESS_COOKIE: "loveoffice_site_access" }));
+vi.mock("../visitorAccess", () => ({ createLetterSubmissionToken, createVisitorAccessToken, getVisitorSiteId, hasSubmittedLetter, letterSubmissionMaxAgeSeconds: 31_536_000, visitorAccessMaxAgeSeconds: 86_400, LETTER_SUBMISSION_COOKIE: "loveoffice_letter_submitted", VISITOR_ACCESS_COOKIE: "loveoffice_site_access" }));
 vi.mock("../_core/cookies", () => ({ getSessionCookieOptions: () => ({ httpOnly: true, path: "/", sameSite: "none", secure: true }) }));
 
 const { siteRouter } = await import("./site");
@@ -79,9 +81,17 @@ describe("multi-site router", () => {
   });
 
   it("forwards all public letter answers in one summary email without exposing the destination email", async () => {
-    const caller = siteRouter.createCaller({ user: null, req: { header: () => "203.0.113.8", ip: "203.0.113.8" } } as never);
-    await expect(caller.public.submitLetterResponse({ slug: "main-memory", answers: [{ question: "วันนี้เป็นยังไงบ้าง", answer: "คิดถึงเหมือนกัน" }, { question: "มีอะไรอยากบอกเราไหม", answer: "อยากเจอเร็ว ๆ" }], startedAt: Date.now() - 3_000 })).resolves.toEqual({ success: true });
+    const response = { cookie: vi.fn() };
+    const caller = siteRouter.createCaller({ user: null, req: { header: () => "203.0.113.8", ip: "203.0.113.8" }, res: response } as never);
+    await expect(caller.public.submitLetterResponse({ slug: "main-memory", answers: [{ question: "วันนี้เป็นยังไงบ้าง", answer: "คิดถึงเหมือนกัน" }, { question: "มีอะไรอยากบอกเราไหม", answer: "อยากเจอเร็ว ๆ" }], startedAt: Date.now() - 3_000 })).resolves.toEqual({ success: true, alreadySubmitted: false });
     expect(sendLoveOfficeEmail).toHaveBeenCalledWith(expect.objectContaining({ to: "owner@example.com", subject: expect.stringContaining("คำตอบจดหมาย"), message: expect.stringContaining("อยากเจอเร็ว ๆ") }));
+    expect(response.cookie).toHaveBeenCalledWith("loveoffice_letter_submitted", "signed-letter-token", expect.objectContaining({ httpOnly: true }));
+  });
+
+  it("does not send another email when the visitor has already submitted the letter", async () => {
+    hasSubmittedLetter.mockResolvedValueOnce(true);
+    const caller = siteRouter.createCaller({ user: null, req: { header: () => "203.0.113.9", ip: "203.0.113.9" }, res: { cookie: vi.fn() } } as never);
+    await expect(caller.public.submitLetterResponse({ slug: "main-memory", answers: [{ question: "วันนี้เป็นยังไงบ้าง", answer: "คิดถึง" }, { question: "มีอะไรอยากบอกเราไหม", answer: "รักนะ" }], startedAt: Date.now() - 3_000 })).resolves.toEqual({ success: true, alreadySubmitted: true });
   });
 
   it("rejects question settings beyond the ten-question limit", async () => {
