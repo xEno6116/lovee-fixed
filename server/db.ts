@@ -23,6 +23,8 @@ export type FeatureSettings = {
   secretGiftMessage: string;
   easterEggEnabled: boolean;
   celebrationOnOpenEnabled: boolean;
+  soundEffectsEnabled: boolean;
+  soundEffectsVolume: number;
   welcomeTitle: string;
   welcomeMessage: string;
   fontFamily: "gaegu" | "serif" | "sans";
@@ -50,7 +52,7 @@ export type FeatureSettings = {
 };
 
 const defaultFeatureSettings = (): FeatureSettings => ({
-  songLabel: "Our Song ❤️", puzzleImageId: 0, uiLayout: "soft-story", ambientHeartsEnabled: true, sparklesEnabled: true, filmOverlayEnabled: false, secretGiftEnabled: true, secretGiftTitle: "กล่องของขวัญลับ", secretGiftMessage: "ขอบคุณที่เข้ามาในความทรงจำนี้นะ 💝", easterEggEnabled: true, celebrationOnOpenEnabled: true, welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", customFontUrl: "", customFontName: "", backgroundStyle: "soft", themeMode: "light", visualTheme: "soft-love", questionLetterEnabled: false, questionLetterTitle: "คำถามถึงเธอ", questionLetterPrompts: [], questionLetterRecipient: "",
+  songLabel: "Our Song ❤️", puzzleImageId: 0, uiLayout: "soft-story", ambientHeartsEnabled: true, sparklesEnabled: true, filmOverlayEnabled: false, secretGiftEnabled: true, secretGiftTitle: "กล่องของขวัญลับ", secretGiftMessage: "ขอบคุณที่เข้ามาในความทรงจำนี้นะ 💝", easterEggEnabled: true, celebrationOnOpenEnabled: true, soundEffectsEnabled: true, soundEffectsVolume: 0.35, welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", customFontUrl: "", customFontName: "", backgroundStyle: "soft", themeMode: "light", visualTheme: "soft-love", questionLetterEnabled: false, questionLetterTitle: "คำถามถึงเธอ", questionLetterPrompts: [], questionLetterRecipient: "",
   hideVideos: false, hideGallery: false, hideMessage: false, surpriseTitle: "", surpriseMessage: "", surpriseAt: "", timeline: [], places: [], notes: [], ownerNote: "",
 });
 
