@@ -15,6 +15,14 @@ export type FeatureSettings = {
   songLabel: string;
   puzzleImageId: number;
   uiLayout: "soft-story" | "polaroid-journal" | "midnight-glass";
+  ambientHeartsEnabled: boolean;
+  sparklesEnabled: boolean;
+  filmOverlayEnabled: boolean;
+  secretGiftEnabled: boolean;
+  secretGiftTitle: string;
+  secretGiftMessage: string;
+  easterEggEnabled: boolean;
+  celebrationOnOpenEnabled: boolean;
   welcomeTitle: string;
   welcomeMessage: string;
   fontFamily: "gaegu" | "serif" | "sans";
@@ -42,7 +50,7 @@ export type FeatureSettings = {
 };
 
 const defaultFeatureSettings = (): FeatureSettings => ({
-  songLabel: "Our Song ❤️", puzzleImageId: 0, uiLayout: "soft-story", welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", customFontUrl: "", customFontName: "", backgroundStyle: "soft", themeMode: "light", visualTheme: "soft-love", questionLetterEnabled: false, questionLetterTitle: "คำถามถึงเธอ", questionLetterPrompts: [], questionLetterRecipient: "",
+  songLabel: "Our Song ❤️", puzzleImageId: 0, uiLayout: "soft-story", ambientHeartsEnabled: true, sparklesEnabled: true, filmOverlayEnabled: false, secretGiftEnabled: true, secretGiftTitle: "กล่องของขวัญลับ", secretGiftMessage: "ขอบคุณที่เข้ามาในความทรงจำนี้นะ 💝", easterEggEnabled: true, celebrationOnOpenEnabled: true, welcomeTitle: "", welcomeMessage: "", fontFamily: "gaegu", customFontUrl: "", customFontName: "", backgroundStyle: "soft", themeMode: "light", visualTheme: "soft-love", questionLetterEnabled: false, questionLetterTitle: "คำถามถึงเธอ", questionLetterPrompts: [], questionLetterRecipient: "",
   hideVideos: false, hideGallery: false, hideMessage: false, surpriseTitle: "", surpriseMessage: "", surpriseAt: "", timeline: [], places: [], notes: [], ownerNote: "",
 });
 
