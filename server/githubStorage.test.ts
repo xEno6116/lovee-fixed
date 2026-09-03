@@ -45,7 +45,7 @@ describe("GitHub JSON storage", () => {
     expect(JSON.parse(String(writeRequest.body))).toMatchObject({ message: "create test data" });
   });
 
-  it("reads from the commit returned by a preceding write before performing another update", async () => {
+  it("reads the current branch head before each update instead of using a stale commit cache", async () => {
     const firstContent = Buffer.from(JSON.stringify({ sites: [] }), "utf8").toString("base64");
     const secondContent = Buffer.from(JSON.stringify({ sites: ["first-site"] }), "utf8").toString("base64");
     const fetchMock = vi
@@ -66,7 +66,7 @@ describe("GitHub JSON storage", () => {
     });
 
     expect(fetchMock.mock.calls[2][0]).toBe(
-      "https://api.github.com/repos/xEno6116/lovee-data/contents/data/sequential.json?ref=commit-after-first-write",
+      "https://api.github.com/repos/xEno6116/lovee-data/contents/data/sequential.json",
     );
   });
 
