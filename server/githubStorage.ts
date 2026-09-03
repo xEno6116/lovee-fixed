@@ -1,4 +1,78 @@
 type GitHubContentFile = {
+  
+  content?: string;
+  
+  encoding?: string;
+  
+  sha?: string;
+  
+  message?: string;
+  
+  commit?: { sha?: string };
+  
+};
+
+
+
+type JsonUpdate<T, R> = {
+  
+  data: T;
+  
+  result: R;
+  
+};
+
+
+
+export class GitHubStorageError extends Error {
+  
+  constructor(
+    
+    message: string,
+    
+    public readonly status: number,
+    
+  ) {
+    
+    super(message);
+    
+    this.name = "GitHubStorageError";
+    
+  }
+  
+}
+
+
+
+const REPOSITORY_OWNER = "xEno6116";
+
+const REPOSITORY_NAME = "lovee-data";
+
+const API_ROOT = `https://api.github.com/repos/${REPOSITORY_OWNER}/${REPOSITORY_NAME}/contents`;
+
+function requireToken() {
+  
+  const token = process.env.GITHUB_DATA_TOKEN;
+  
+  if (!token) {
+    
+    throw new Error("ยังไม่ได้กำหนด GITHUB_DATA_TOKEN สำหรับที่เก็บ้อมูลเว็บไซต์");
+    
+  }
+  
+  return token;
+  
+}
+
+
+
+function apiUrl(path: string, ref?: string) {
+  
+  const url = new URL(`${API_ROOT}/${path.split("/").map(encodeURIComponent).join("/")}`);
+  
+  if (ref) url.searchParams.set("ref", ref);
+  
+  return url.toString();
   content?: string;
   encoding?: string;
   sha?: string;
@@ -24,8 +98,6 @@ export class GitHubStorageError extends Error {
 const REPOSITORY_OWNER = "xEno6116";
 const REPOSITORY_NAME = "lovee-data";
 const API_ROOT = `https://api.github.com/repos/${REPOSITORY_OWNER}/${REPOSITORY_NAME}/contents`;
-const latestCommitByPath = new Map<string, string>();
-
 function requireToken() {
   const token = process.env.GITHUB_DATA_TOKEN;
   if (!token) {
@@ -61,7 +133,10 @@ async function request(path: string, init: RequestInit = {}, ref?: string) {
 
 export async function readJson<T>(path: string, makeDefault: () => T): Promise<{ data: T; sha?: string }> {
   try {
-    const file = await request(path, {}, latestCommitByPath.get(path));
+    // Always read the current branch head. Caching a commit SHA across warm
+    // serverless invocations can make the app serve stale site data after
+    // another request updates the JSON file.
+    const file = await request(path);
     if (!file.content || file.encoding !== "base64" || !file.sha) {
       throw new Error(`ไฟล์ข้อมูล ${path} มีรูปแบบไม่ถูกต้อง`);
     }
@@ -82,7 +157,6 @@ async function writeJson<T>(path: string, data: T, message: string, sha?: string
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ message, content, ...(sha ? { sha } : {}) }),
   });
-  if (written.commit?.sha) latestCommitByPath.set(path, written.commit.sha);
   return written;
 }
 
