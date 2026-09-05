@@ -3,7 +3,7 @@ import type { InsertUser, User } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { updateJson, readJson } from "./githubStorage";
 import { DEFAULT_PIN, hashPin, safeFileName } from "./siteUtils";
-import { storagePut } from "./storage";
+import { storagePrepareUpload, storagePut } from "./storage";
 
 type MediaKind = "image" | "video" | "audio";
 
@@ -285,6 +285,37 @@ export async function setMusicUrl(siteId: number, musicUrl: string) {
     site.settings.updatedAt = now;
     site.updatedAt = now;
     return { data: repository, result: undefined };
+  });
+}
+
+export async function prepareMediaUpload(siteId: number, input: { kind: MediaKind; originalName: string; mimeType: string }) {
+  const fileName = safeFileName(input.originalName);
+  const storageKey = `anniversary/${siteId}/${input.kind}/${Date.now()}-${nanoid(10)}-${fileName}`;
+  return storagePrepareUpload(storageKey, input.mimeType);
+}
+
+export async function finalizeMediaAsset(
+  siteId: number,
+  input: { kind: MediaKind; originalName: string; mimeType: string; key: string; url: string },
+) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: add ${input.kind} ${siteId}`, (repository) => {
+    const site = getSite(repository, siteId);
+    if (!site) throw new Error("ไม่พบเว็บไซต์สำหรับบันทึกสื่อ");
+    const nextOrder = (site.assets.filter((asset) => asset.kind === input.kind).at(-1)?.sortOrder ?? -1) + 1;
+    const created: StoredAsset = {
+      id: repository.nextAssetId++,
+      siteId,
+      kind: input.kind,
+      storageKey: input.key,
+      url: input.url,
+      originalName: input.originalName,
+      mimeType: input.mimeType,
+      sortOrder: nextOrder,
+      createdAt: new Date().toISOString(),
+    };
+    site.assets.push(created);
+    site.updatedAt = new Date().toISOString();
+    return { data: repository, result: toClientAsset(created) };
   });
 }
 

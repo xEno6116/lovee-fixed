@@ -28,47 +28,49 @@ function appendHashSuffix(relKey: string): string {
   return `${relKey.slice(0, lastDot)}_${hash}${relKey.slice(lastDot)}`;
 }
 
-export async function storagePut(
+export async function storagePrepareUpload(
   relKey: string,
-  data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream",
-): Promise<{ key: string; url: string }> {
+): Promise<{ key: string; uploadUrl: string; url: string }> {
   const { forgeUrl, forgeKey } = getForgeConfig();
   const key = appendHashSuffix(normalizeKey(relKey));
-
-  // 1. Get presigned PUT URL from Forge
   const presignUrl = new URL("v1/storage/presign/put", forgeUrl + "/");
   presignUrl.searchParams.set("path", key);
+  presignUrl.searchParams.set("contentType", contentType);
 
   const presignResp = await fetch(presignUrl, {
     headers: { Authorization: `Bearer ${forgeKey}` },
   });
-
   if (!presignResp.ok) {
     const msg = await presignResp.text().catch(() => presignResp.statusText);
     throw new Error(`Storage presign failed (${presignResp.status}): ${msg}`);
   }
 
-  const { url: s3Url } = (await presignResp.json()) as { url: string };
-  if (!s3Url) throw new Error("Forge returned empty presign URL");
+  const { url: uploadUrl } = (await presignResp.json()) as { url: string };
+  if (!uploadUrl) throw new Error("Forge returned empty presign URL");
+  return { key, uploadUrl, url: `/manus-storage/${key}` };
+}
 
-  // 2. PUT file directly to S3
+export async function storagePut(
+  relKey: string,
+  data: Buffer | Uint8Array | string,
+  contentType = "application/octet-stream",
+): Promise<{ key: string; url: string }> {
+  const { key, uploadUrl, url } = await storagePrepareUpload(relKey, contentType);
   const blob =
     typeof data === "string"
       ? new Blob([data], { type: contentType })
       : new Blob([data as any], { type: contentType });
 
-  const uploadResp = await fetch(s3Url, {
+  const uploadResp = await fetch(uploadUrl, {
     method: "PUT",
     headers: { "Content-Type": contentType },
     body: blob,
   });
-
   if (!uploadResp.ok) {
     throw new Error(`Storage upload to S3 failed (${uploadResp.status})`);
   }
-
-  return { key, url: `/manus-storage/${key}` };
+  return { key, url };
 }
 
 export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {

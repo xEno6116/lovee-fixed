@@ -18,7 +18,8 @@ export default function Settings({ slug }: { slug: string }) {
   const [status, setStatus] = useState<{ tone: "success" | "error" | "info"; message: string } | null>(null);
   const invalidateSite = () => { void utils.site.admin.get.invalidate({ slug }); void utils.site.private.get.invalidate({ slug }); };
   const saveMutation = trpc.site.admin.saveSettings.useMutation({ onSuccess: () => { invalidateSite(); setPin(""); setStatus({ tone: "success", message: "บันทึกการตั้งค่าแล้ว" }); }, onError: (error) => setStatus({ tone: "error", message: `บันทึกไม่สำเร็จ: ${error.message}` }) });
-  const uploadMutation = trpc.site.admin.uploadMedia.useMutation({ onSuccess: invalidateSite, onError: (error) => setStatus({ tone: "error", message: `อัปโหลดไม่สำเร็จ: ${error.message}` }) });
+  const prepareUploadMutation = trpc.site.admin.prepareUpload.useMutation();
+  const finalizeUploadMutation = trpc.site.admin.finalizeUpload.useMutation({ onSuccess: invalidateSite });
   const removeMutation = trpc.site.admin.removeMedia.useMutation({ onSuccess: () => { invalidateSite(); setStatus({ tone: "success", message: "ลบไฟล์ออกจากรายการแล้ว" }); }, onError: (error) => setStatus({ tone: "error", message: `ลบไฟล์ไม่สำเร็จ: ${error.message}` }) });
 
   useEffect(() => { const settings = adminQuery.data?.settings; if (settings) { setMemoryMessage(settings.memoryMessage); setStartDate(settings.startDate); } }, [adminQuery.data?.settings]);
@@ -30,8 +31,19 @@ export default function Settings({ slug }: { slug: string }) {
   const uploadFiles = async (kind: "image" | "video" | "audio", files: File[]) => {
     if (!files.length) return;
     if (kind === "video" && videos.length + files.length > 4) { setStatus({ tone: "error", message: "อัปโหลดวิดีโอได้สูงสุด 4 ช่อง" }); return; }
-    setUploading(true); setStatus({ tone: "info", message: "กำลังอัปโหลดไฟล์ไปยังพื้นที่จัดเก็บ…" });
-    try { for (const file of files) await uploadMutation.mutateAsync({ slug, kind, fileName: file.name, dataUrl: await readAsDataUrl(file) }); setStatus({ tone: "success", message: `อัปโหลด ${files.length} ไฟล์เรียบร้อยแล้ว` }); } catch (error) { setStatus({ tone: "error", message: `อัปโหลดไม่สำเร็จ: ${error instanceof Error ? error.message : "เกิดข้อผิดพลาด"}` }); } finally { setUploading(false); }
+    setUploading(true); setStatus({ tone: "info", message: "กำลังเตรียมพื้นที่จัดเก็บไฟล์…" });
+    try {
+      for (const file of files) {
+        const mimeType = file.type || "application/octet-stream";
+        const plan = await prepareUploadMutation.mutateAsync({ slug, kind, fileName: file.name, mimeType });
+        const response = await fetch(plan.uploadUrl, { method: "PUT", headers: { "Content-Type": mimeType }, body: file });
+        if (!response.ok) throw new Error(`อัปโหลดไฟล์ไปยังพื้นที่จัดเก็บไม่สำเร็จ (${response.status})`);
+        await finalizeUploadMutation.mutateAsync({ slug, kind, fileName: file.name, mimeType, key: plan.key, url: plan.url });
+      }
+      setStatus({ tone: "success", message: `อัปโหลด ${files.length} ไฟล์เรียบร้อยแล้ว` });
+    } catch (error) {
+      setStatus({ tone: "error", message: `อัปโหลดไม่สำเร็จ: ${error instanceof Error ? error.message : "เกิดข้อผิดพลาด"}` });
+    } finally { setUploading(false); }
   };
   const onFiles = (kind: "image" | "video" | "audio") => async (event: ChangeEvent<HTMLInputElement>) => { try { await uploadFiles(kind, Array.from(event.target.files ?? [])); } finally { event.target.value = ""; } };
   const save = () => { const musicUrl = adminQuery.data?.settings.musicUrl ?? ""; setStatus({ tone: "info", message: "กำลังบันทึกการตั้งค่า…" }); saveMutation.mutate({ slug, memoryMessage, startDate, pin: pin || undefined, musicUrl }); };

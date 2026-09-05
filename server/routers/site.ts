@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   createMediaAsset,
   createSiteForOwner,
+  finalizeMediaAsset,
   deleteMediaAsset,
   deleteSiteForOwner,
   getAdminSiteData,
@@ -10,6 +11,7 @@ import {
   getPrivateSiteData,
   listMediaAssets,
   listSitesForOwner,
+  prepareMediaUpload,
   setMusicUrl,
   updateMediaOrder,
   updateSiteSettings,
@@ -86,6 +88,25 @@ export const siteRouter = router({
       .mutation(async ({ ctx, input }) => {
         const site = await requireOwnedSite(ctx.user.id, input.slug);
         return updateSiteSettings(site.id, input);
+      }),
+    prepareUpload: protectedProcedure
+      .input(z.object({ slug: slugSchema, kind: z.enum(["image", "video", "audio"]), fileName: z.string().trim().min(1).max(255), mimeType: z.string().trim().min(3).max(120) }))
+      .mutation(async ({ ctx, input }) => {
+        const site = await requireOwnedSite(ctx.user.id, input.slug);
+        if (!isAllowedMedia(input.kind, input.mimeType)) throw new TRPCError({ code: "BAD_REQUEST", message: "ชนิดไฟล์ไม่ตรงกับช่องอัปโหลด" });
+        if (input.kind === "video" && (await listMediaAssets(site.id, "video")).length >= 4) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "อัปโหลดวิดีโอได้สูงสุด 4 ไฟล์" });
+        }
+        return prepareMediaUpload(site.id, { kind: input.kind, originalName: input.fileName, mimeType: input.mimeType });
+      }),
+    finalizeUpload: protectedProcedure
+      .input(z.object({ slug: slugSchema, kind: z.enum(["image", "video", "audio"]), fileName: z.string().trim().min(1).max(255), mimeType: z.string().trim().min(3).max(120), key: z.string().trim().min(1).max(500), url: z.string().regex(/^\/manus-storage\//) }))
+      .mutation(async ({ ctx, input }) => {
+        const site = await requireOwnedSite(ctx.user.id, input.slug);
+        if (!isAllowedMedia(input.kind, input.mimeType)) throw new TRPCError({ code: "BAD_REQUEST", message: "ชนิดไฟล์ไม่ตรงกับช่องอัปโหลด" });
+        const created = await finalizeMediaAsset(site.id, { kind: input.kind, originalName: input.fileName, mimeType: input.mimeType, key: input.key, url: input.url });
+        if (input.kind === "audio") await setMusicUrl(site.id, created.url);
+        return created;
       }),
     uploadMedia: protectedProcedure
       .input(z.object({ slug: slugSchema, kind: z.enum(["image", "video", "audio"]), fileName: z.string().trim().min(1).max(255), dataUrl: z.string().min(20).max(42_000_000) }))
