@@ -38,8 +38,23 @@ async function requireOwnedSite(ownerId: number, slug: string) {
   return site;
 }
 
-async function verifyRecaptcha(token: string) {
-  if (!ENV.recaptchaSecretKey) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "ยังไม่ได้ตั้งค่า reCAPTCHA ในระบบ" });
+const pinAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function allowPinAttempt(key: string) {
+  const now = Date.now();
+  const current = pinAttempts.get(key);
+  if (!current || current.resetAt <= now) {
+    pinAttempts.set(key, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+  if (current.count >= 10) return false;
+  current.count += 1;
+  return true;
+}
+
+async function verifyRecaptcha(token?: string) {
+  if (!ENV.recaptchaSecretKey) return true;
+  if (!token) return false;
   const body = new URLSearchParams({ secret: ENV.recaptchaSecretKey, response: token });
   const response = await fetch("https://www.google.com/recaptcha/api/siteverify", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
   if (!response.ok) return false;
@@ -79,9 +94,11 @@ export const siteRouter = router({
         return data;
       }),
     verifyPin: protectedProcedure
-      .input(z.object({ slug: slugSchema, pin: z.string(), recaptchaToken: z.string().min(10) }))
+      .input(z.object({ slug: slugSchema, pin: z.string(), recaptchaToken: z.string().min(10).optional() }))
       .mutation(async ({ ctx, input }) => {
         if (!isValidPin(input.pin)) return { valid: false };
+        const address = ctx.req?.ip || ctx.req?.headers["x-forwarded-for"]?.toString().split(",")[0] || "unknown";
+        if (!allowPinAttempt(`${address}:${input.slug}`)) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "ลอง PIN มากเกินไป กรุณารอ 1 นาที" });
         if (!(await verifyRecaptcha(input.recaptchaToken))) return { valid: false, bot: true };
         const site = await requireOwnedSite(ctx.user.id, input.slug);
         return { valid: await verifySitePin(site.id, input.pin) };

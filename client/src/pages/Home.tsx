@@ -83,8 +83,9 @@ export default function Home({ slug }: { slug: string }) {
     setPin(next);
     setError("");
     if (next.length === 4) {
+      const recaptchaEnabled = Boolean(import.meta.env.VITE_RECAPTCHA_SITE_KEY);
       const recaptchaToken = window.grecaptcha?.getResponse(captchaWidget.current ?? undefined) ?? "";
-      if (!recaptchaToken) { setError("กรุณาติ๊กยืนยันว่าไม่ใช่บอทก่อน"); setPin(""); return; }
+      if (recaptchaEnabled && !recaptchaToken) { setError("กรุณาติ๊กยืนยันว่าไม่ใช่บอทก่อน"); setPin(""); return; }
       verifyPin.mutate({ slug, pin: next, recaptchaToken }, {
       onSuccess: ({ valid }) => {
         if (valid) { setUnlocked(true); setPin(""); }
