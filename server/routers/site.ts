@@ -19,6 +19,7 @@ import {
 } from "../db";
 import { decodeDataUrl, isAllowedMedia, isValidPin } from "../siteUtils";
 import { protectedProcedure, router } from "../_core/trpc";
+import { ENV } from "../_core/env";
 
 const slugSchema = z.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
 const siteInput = z.object({ slug: slugSchema });
@@ -35,6 +36,15 @@ async function requireOwnedSite(ownerId: number, slug: string) {
   const site = await getOwnedSiteBySlug(ownerId, slug);
   if (!site) throw new TRPCError({ code: "NOT_FOUND", message: "ไม่พบเว็บไซต์นี้ หรือคุณไม่มีสิทธิ์เข้าถึง" });
   return site;
+}
+
+async function verifyRecaptcha(token: string) {
+  if (!ENV.recaptchaSecretKey) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "ยังไม่ได้ตั้งค่า reCAPTCHA ในระบบ" });
+  const body = new URLSearchParams({ secret: ENV.recaptchaSecretKey, response: token });
+  const response = await fetch("https://www.google.com/recaptcha/api/siteverify", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body });
+  if (!response.ok) return false;
+  const result = (await response.json()) as { success?: boolean };
+  return result.success === true;
 }
 
 export const siteRouter = router({
@@ -69,9 +79,10 @@ export const siteRouter = router({
         return data;
       }),
     verifyPin: protectedProcedure
-      .input(z.object({ slug: slugSchema, pin: z.string() }))
+      .input(z.object({ slug: slugSchema, pin: z.string(), recaptchaToken: z.string().min(10) }))
       .mutation(async ({ ctx, input }) => {
         if (!isValidPin(input.pin)) return { valid: false };
+        if (!(await verifyRecaptcha(input.recaptchaToken))) return { valid: false, bot: true };
         const site = await requireOwnedSite(ctx.user.id, input.slug);
         return { valid: await verifySitePin(site.id, input.pin) };
       }),
