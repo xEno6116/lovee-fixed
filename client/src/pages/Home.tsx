@@ -7,7 +7,7 @@ import { trpc } from "@/lib/trpc";
 
 declare global {
   interface Window {
-    grecaptcha?: { getResponse: () => string; reset: () => void };
+    grecaptcha?: { render: (container: HTMLElement, parameters: { sitekey: string }) => number; getResponse: (widgetId?: number) => string; reset: (widgetId?: number) => void };
   }
 }
 
@@ -36,6 +36,8 @@ export default function Home({ slug }: { slug: string }) {
   const [unlocked, setUnlocked] = useState(false);
   const [clock, setClock] = useState<TimeParts>({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   const [deletionClock, setDeletionClock] = useState<TimeParts>({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+  const captchaRef = useRef<HTMLDivElement>(null);
+  const captchaWidget = useRef<number | null>(null);
   const [videoIndex, setVideoIndex] = useState(0);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -60,20 +62,35 @@ export default function Home({ slug }: { slug: string }) {
     return () => window.clearInterval(timer);
   }, [site?.locked, site?.deletionAt]);
 
+  useEffect(() => {
+    const siteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+    if (!siteKey || !captchaRef.current || captchaWidget.current !== null) return;
+    const renderCaptcha = () => {
+      if (window.grecaptcha && captchaRef.current && captchaWidget.current === null) {
+        captchaWidget.current = window.grecaptcha.render(captchaRef.current, { sitekey: siteKey });
+        return true;
+      }
+      return false;
+    };
+    if (renderCaptcha()) return;
+    const timer = window.setInterval(() => { if (renderCaptcha()) window.clearInterval(timer); }, 200);
+    return () => window.clearInterval(timer);
+  }, [site?.site.id]);
+
   const pressNumber = (digit: string) => {
     if (verifyPin.isPending || pin.length >= 4) return;
     const next = `${pin}${digit}`;
     setPin(next);
     setError("");
     if (next.length === 4) {
-      const recaptchaToken = window.grecaptcha?.getResponse() ?? "";
+      const recaptchaToken = window.grecaptcha?.getResponse(captchaWidget.current ?? undefined) ?? "";
       if (!recaptchaToken) { setError("กรุณาติ๊กยืนยันว่าไม่ใช่บอทก่อน"); setPin(""); return; }
       verifyPin.mutate({ slug, pin: next, recaptchaToken }, {
       onSuccess: ({ valid }) => {
         if (valid) { setUnlocked(true); setPin(""); }
-        else { setError("การยืนยันไม่ผ่าน หรือ PIN ไม่ถูกต้อง"); window.setTimeout(() => setPin(""), 450); window.grecaptcha?.reset(); }
+        else { setError("การยืนยันไม่ผ่าน หรือ PIN ไม่ถูกต้อง"); window.setTimeout(() => setPin(""), 450); window.grecaptcha?.reset(captchaWidget.current ?? undefined); }
       },
-      onError: () => { setError("ตรวจสอบ PIN ไม่สำเร็จ"); setPin(""); window.grecaptcha?.reset(); },
+      onError: () => { setError("ตรวจสอบ PIN ไม่สำเร็จ"); setPin(""); window.grecaptcha?.reset(captchaWidget.current ?? undefined); },
       });
     }
   };
@@ -98,7 +115,7 @@ export default function Home({ slug }: { slug: string }) {
     {!unlocked && <section className="legacy-lock-screen">
       <Link href={`/site/${slug}/settings`} className="legacy-settings-trigger" aria-label="Settings"><Settings size={20} /></Link>
       <div className="mb-10 text-center"><h2>{site.site.title}</h2></div>
-      <div className="flex justify-center mb-5"><div className="g-recaptcha" data-sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY ?? ""} /></div>
+      <div ref={captchaRef} className="flex justify-center mb-5" aria-label="ยืนยันว่าไม่ใช่บอท" />
       <div className="legacy-dots" aria-label="PIN progress">{Array.from({ length: 4 }, (_, index) => <span key={index} className={index < pin.length ? "active" : ""} />)}</div>
       <div className="legacy-keypad">{Array.from({ length: 9 }, (_, index) => <button type="button" key={index + 1} className="legacy-key-btn" onClick={() => pressNumber(String(index + 1))}>{index + 1}</button>)}<span /><button type="button" className="legacy-key-btn" onClick={() => pressNumber("0")}>0</button><button type="button" className="legacy-key-btn soft" onClick={() => setPin((value) => value.slice(0, -1))} aria-label="ลบตัวเลข">←</button></div>
       <p className="legacy-lock-error">{verifyPin.isPending ? "กำลังตรวจสอบ…" : error}</p>
