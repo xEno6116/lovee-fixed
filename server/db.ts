@@ -14,6 +14,7 @@ type StoredSettings = {
   startDate: string;
   memoryMessage: string;
   musicUrl: string;
+  expiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -195,6 +196,7 @@ export async function createSiteForOwner(ownerId: number, input: { title: string
         startDate: "2024-04-06",
         memoryMessage: "บันทึกความทรงจำของเรา",
         musicUrl: "",
+        expiresAt: null,
         createdAt: now,
         updatedAt: now,
       },
@@ -230,6 +232,9 @@ export async function getPrivateSiteData(ownerId: number, slug: string) {
   const site = await getOwnedSiteBySlug(ownerId, slug);
   if (!site) return undefined;
   const assets = sortAssets(site.assets);
+  const expiresAt = site.settings.expiresAt ?? null;
+  const expiresAtMs = expiresAt ? new Date(expiresAt).getTime() : NaN;
+  const locked = Number.isFinite(expiresAtMs) && Date.now() >= expiresAtMs;
   return {
     site: toClientSite(site),
     settings: {
@@ -237,7 +242,10 @@ export async function getPrivateSiteData(ownerId: number, slug: string) {
       startDate: site.settings.startDate,
       memoryMessage: site.settings.memoryMessage,
       musicUrl: site.settings.musicUrl,
+      expiresAt,
     },
+    locked,
+    deletionAt: Number.isFinite(expiresAtMs) ? new Date(expiresAtMs + 3 * 86_400_000).toISOString() : null,
     images: assets.filter((asset) => asset.kind === "image").map(toClientAsset),
     videos: assets.filter((asset) => asset.kind === "video").map(toClientAsset),
   };
@@ -258,7 +266,7 @@ export async function verifySitePin(siteId: number, pin: string) {
   return Boolean(settings && settings.pinHash === hashPin(pin));
 }
 
-export async function updateSiteSettings(siteId: number, input: { memoryMessage: string; startDate: string; pin?: string; musicUrl: string }) {
+export async function updateSiteSettings(siteId: number, input: { memoryMessage: string; startDate: string; pin?: string; musicUrl: string; expiresAt?: string | null }) {
   return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update settings ${siteId}`, (repository) => {
     const site = getSite(repository, siteId);
     if (!site) throw new Error("ไม่พบเว็บไซต์สำหรับบันทึกการตั้งค่า");
@@ -268,11 +276,25 @@ export async function updateSiteSettings(siteId: number, input: { memoryMessage:
       memoryMessage: input.memoryMessage,
       startDate: input.startDate,
       musicUrl: input.musicUrl,
+      ...(input.expiresAt !== undefined ? { expiresAt: input.expiresAt } : {}),
       ...(input.pin ? { pinHash: hashPin(input.pin) } : {}),
       updatedAt: now,
     };
     site.updatedAt = now;
     return { data: repository, result: toClientSettings(site.settings) };
+  });
+}
+
+/** Removes expired sites after the three-day grace period. Removing media keys
+ * from the repository makes the associated storage objects unreachable. */
+export async function purgeExpiredSites(now = Date.now()) {
+  return updateJson(SITE_DATA_PATH, emptyRepository, "anniversary: purge expired sites", (repository) => {
+    const before = repository.sites.length;
+    repository.sites = repository.sites.filter((site) => {
+      const expiresAtMs = site.settings.expiresAt ? new Date(site.settings.expiresAt).getTime() : NaN;
+      return !Number.isFinite(expiresAtMs) || now < expiresAtMs + 3 * 86_400_000;
+    });
+    return { data: repository, result: { deleted: before - repository.sites.length } };
   });
 }
 

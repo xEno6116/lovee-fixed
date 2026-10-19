@@ -12,6 +12,11 @@ function elapsedFrom(startDate: string): TimeParts {
   return { days: Math.floor(difference / 86_400_000), hours: Math.floor((difference / 3_600_000) % 24), minutes: Math.floor((difference / 60_000) % 60), seconds: Math.floor((difference / 1_000) % 60) };
 }
 
+function remainingUntil(target: string): TimeParts {
+  const difference = Math.max(0, new Date(target).getTime() - Date.now());
+  return { days: Math.floor(difference / 86_400_000), hours: Math.floor((difference / 3_600_000) % 24), minutes: Math.floor((difference / 60_000) % 60), seconds: Math.floor((difference / 1_000) % 60) };
+}
+
 function ClockBox({ value, label }: { value: number; label: string }) {
   return <div className="legacy-clock-box"><strong>{value}</strong><span>{label}</span></div>;
 }
@@ -24,6 +29,7 @@ export default function Home({ slug }: { slug: string }) {
   const [error, setError] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [clock, setClock] = useState<TimeParts>({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+  const [deletionClock, setDeletionClock] = useState<TimeParts>({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   const [videoIndex, setVideoIndex] = useState(0);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -39,6 +45,14 @@ export default function Home({ slug }: { slug: string }) {
     const timer = window.setInterval(updateClock, 1_000);
     return () => window.clearInterval(timer);
   }, [site?.settings.startDate]);
+
+  useEffect(() => {
+    if (!site?.locked || !site.deletionAt) return;
+    const updateClock = () => setDeletionClock(remainingUntil(site.deletionAt!));
+    updateClock();
+    const timer = window.setInterval(updateClock, 1_000);
+    return () => window.clearInterval(timer);
+  }, [site?.locked, site?.deletionAt]);
 
   const pressNumber = (digit: string) => {
     if (verifyPin.isPending || pin.length >= 4) return;
@@ -64,6 +78,7 @@ export default function Home({ slug }: { slug: string }) {
   if (!isAuthenticated) return <div className="legacy-loading"><div className="text-center"><p>เว็บไซต์นี้เป็นส่วนตัวสำหรับเจ้าของเท่านั้น</p><button className="legacy-save-btn mt-5" onClick={() => startLogin()}>เข้าสู่ระบบเจ้าของ</button></div></div>;
   if (siteQuery.isLoading) return <div className="legacy-loading">กำลังเปิดความทรงจำ…</div>;
   if (!site) return <div className="legacy-loading">ไม่สามารถเปิดเว็บไซต์นี้ได้</div>;
+  if (site.locked) return <div className="legacy-lock-screen"><div className="legacy-admin-box text-center"><h2>เว็บไซต์ถูกล็อกแล้ว</h2><p className="legacy-admin-note">เว็บไซต์นี้หมดอายุและจะลบข้อมูลกับสื่อโดยอัตโนมัติเมื่อครบกำหนด</p><div className="legacy-clock justify-center my-6"><ClockBox value={deletionClock.days} label="วัน" /><ClockBox value={deletionClock.hours} label="ชั่วโมง" /><ClockBox value={deletionClock.minutes} label="นาที" /><ClockBox value={deletionClock.seconds} label="วินาที" /></div><p className="legacy-admin-note">กรุณาติดต่อเจ้าของเว็บไซต์เพื่อขอต่ออายุ</p></div></div>;
 
   const photos = site.images;
   const movePhoto = (direction: number) => { if (photos.length) setPhotoIndex((index) => (index + direction + photos.length) % photos.length); };

@@ -4,6 +4,8 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { registerOAuthRoutes } from "./oauth";
 import { registerStorageProxy } from "./storageProxy";
+import { ENV } from "./env";
+import { purgeExpiredSites } from "../db";
 
 /**
  * Shared Express application for the local server and Vercel's serverless handler.
@@ -15,6 +17,20 @@ export function createApp() {
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+  app.get("/api/cron/purge-expired", async (req, res) => {
+    const authorization = req.headers.authorization;
+    if (!ENV.cronSecret || authorization !== `Bearer ${ENV.cronSecret}`) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    try {
+      const result = await purgeExpiredSites();
+      res.json({ ok: true, deleted: result.deleted });
+    } catch (error) {
+      console.error("[Expiry] purge failed", error);
+      res.status(500).json({ error: "Expiry cleanup failed" });
+    }
+  });
   app.use(
     "/api/trpc",
     createExpressMiddleware({
