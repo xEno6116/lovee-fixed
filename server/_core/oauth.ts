@@ -4,6 +4,8 @@ import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
+import { ENV } from "./env";
+import { timingSafeEqual } from "node:crypto";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -11,6 +13,27 @@ function getQueryParam(req: Request, key: string): string | undefined {
 }
 
 export function registerOAuthRoutes(app: Express) {
+  app.post("/api/owner-login", async (req: Request, res: Response) => {
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    const expected = ENV.ownerLoginPassword;
+    const matches = expected && password && password.length === expected.length
+      ? timingSafeEqual(Buffer.from(password), Buffer.from(expected))
+      : false;
+    if (!matches || !ENV.ownerOpenId) {
+      res.status(401).json({ error: "รหัสเจ้าของไม่ถูกต้อง" });
+      return;
+    }
+    try {
+      await db.upsertUser({ openId: ENV.ownerOpenId, name: ENV.ownerName, loginMethod: "owner-password", lastSignedIn: new Date() });
+      const sessionToken = await sdk.createSessionToken(ENV.ownerOpenId, { name: ENV.ownerName, expiresInMs: ONE_YEAR_MS });
+      res.cookie(COOKIE_NAME, sessionToken, { ...getSessionCookieOptions(req), maxAge: ONE_YEAR_MS });
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("[OwnerLogin] Failed", error);
+      res.status(500).json({ error: "ไม่สามารถเข้าสู่ระบบได้" });
+    }
+  });
+
   app.get("/api/oauth/callback", async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");

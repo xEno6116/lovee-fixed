@@ -14,6 +14,8 @@ export default function Dashboard() {
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [error, setError] = useState("");
+  const [ownerPassword, setOwnerPassword] = useState("");
+  const [ownerLoginPending, setOwnerLoginPending] = useState(false);
   const createMutation = trpc.site.dashboard.create.useMutation({
     onSuccess: (site) => { void utils.site.dashboard.list.invalidate(); setLocation(`/site/${site.slug}/settings`); },
     onError: (reason) => setError(reason.message),
@@ -24,9 +26,18 @@ export default function Dashboard() {
   });
   const create = () => { setError(""); createMutation.mutate({ title, slug: slug.trim().toLowerCase() }); };
   const remove = (siteTitle: string, siteSlug: string) => { if (window.confirm(`ลบเว็บไซต์ “${siteTitle}” และข้อมูลทั้งหมดหรือไม่?`)) removeMutation.mutate({ slug: siteSlug }); };
+  const loginWithOwnerPassword = async () => {
+    setOwnerLoginPending(true); setError("");
+    try {
+      const response = await fetch("/api/owner-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: ownerPassword }) });
+      if (!response.ok) throw new Error("รหัสเจ้าของไม่ถูกต้อง");
+      window.location.reload();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "เข้าสู่ระบบไม่สำเร็จ"); }
+    finally { setOwnerLoginPending(false); }
+  };
 
   if (loading) return <div className="legacy-loading"><Loader2 className="animate-spin" /></div>;
-  if (!isAuthenticated) return <div className="legacy-loading"><div className="text-center"><h1 className="text-3xl">หลังบ้านเว็บไซต์ความทรงจำ</h1><p className="mt-3">เข้าสู่ระบบเพื่อสร้างและดูเฉพาะเว็บไซต์ของคุณ</p><button className="legacy-save-btn mt-6" onClick={() => startLogin()}>เข้าสู่ระบบ</button></div></div>;
+  if (!isAuthenticated) return <div className="legacy-loading"><div className="text-center"><h1 className="text-3xl">หลังบ้านเว็บไซต์ความทรงจำ</h1><p className="mt-3">เข้าสู่ระบบเพื่อสร้างและดูเฉพาะเว็บไซต์ของคุณ</p>{import.meta.env.VITE_OAUTH_PORTAL_URL && import.meta.env.VITE_APP_ID ? <button className="legacy-save-btn mt-6" onClick={() => { const message = startLogin(); if (message) setError(message); }}>เข้าสู่ระบบ</button> : <div className="mt-6"><input type="password" value={ownerPassword} onChange={(event) => setOwnerPassword(event.target.value)} placeholder="รหัสเจ้าของ" className="rounded-xl border border-pink-200 bg-white px-4 py-3" autoComplete="current-password" /><button className="legacy-save-btn ml-2" onClick={loginWithOwnerPassword} disabled={!ownerPassword || ownerLoginPending}>{ownerLoginPending ? "กำลังตรวจสอบ…" : "เข้าสู่ระบบ"}</button></div>}{error && <p className="legacy-lock-error mt-4">{error}</p>}</div></div>;
 
   return <DashboardLayout><div className="mx-auto max-w-5xl space-y-8 py-6">
     <header><p className="text-sm font-semibold text-pink-500">PRIVATE SITE MANAGER</p><h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">เว็บไซต์ของฉัน</h1><p className="mt-2 text-slate-500">ทุกเว็บไซต์ ข้อมูล และสื่อ ถูกแยกตามบัญชีของคุณ</p></header>
