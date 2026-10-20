@@ -45,7 +45,7 @@ export default function DashboardLayout({
     const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
   });
-  const { loading, user } = useAuth();
+  const { loading, isAuthenticated, user } = useAuth();
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
@@ -55,7 +55,7 @@ export default function DashboardLayout({
     return <DashboardLayoutSkeleton />
   }
 
-  if (!user) {
+  if (!isAuthenticated) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
