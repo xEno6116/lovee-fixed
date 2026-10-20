@@ -8,7 +8,9 @@
     }
   },
   "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/[...path]" },
     { "source": "/manus-storage/:path*", "destination": "/api/manus-storage/:path*" },
+    { "source": "/dashboard", "destination": "/index.html" },
     { "source": "/site/:slug", "destination": "/index.html" },
     { "source": "/site/:slug/settings", "destination": "/index.html" }
   ],
