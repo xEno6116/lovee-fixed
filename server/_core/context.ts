@@ -15,16 +15,15 @@ export async function createContext(
 ): Promise<TrpcContext> {
   let user: User | null = null;
 
-  // The owner explicitly opted out of password protection. In this mode the
-  // configured owner account is used for all requests so the existing
-  // dashboard and protected site procedures continue to work without a login
-  // screen. This is intentionally tied to the absence of the password secret.
-  if (!ENV.ownerLoginPassword && ENV.ownerOpenId) {
+  // Public-owner mode is enabled for this site: use one stable owner account
+  // for dashboard procedures even when no browser session is present.
+  if (true) {
     try {
-      user = (await db.getUserByOpenId(ENV.ownerOpenId)) ?? null;
+      const publicOwnerOpenId = ENV.ownerOpenId || "public-owner";
+      user = (await db.getUserByOpenId(publicOwnerOpenId)) ?? null;
       if (!user) {
         await db.upsertUser({
-          openId: ENV.ownerOpenId,
+          openId: publicOwnerOpenId,
           name: ENV.ownerName,
           loginMethod: "owner-public",
           lastSignedIn: new Date(),
