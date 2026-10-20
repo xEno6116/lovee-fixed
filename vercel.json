@@ -6,7 +6,7 @@
     { "source": "/manus-storage/:path*", "destination": "/api/manus-storage/:path*" },
     { "source": "/site/:slug", "destination": "/index.html" },
     { "source": "/site/:slug/settings", "destination": "/index.html" },
-    { "source": "/(.*)", "destination": "/index.html" }
+    { "source": "/((?!api(?:/|$)|manus-storage(?:/|$)).*)", "destination": "/index.html" }
   ],
   "crons": [{ "path": "/api/cron/purge-expired", "schedule": "0 0 * * *" }]
 }
