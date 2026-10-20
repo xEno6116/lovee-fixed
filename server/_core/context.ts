@@ -28,7 +28,7 @@ export async function createContext(
           loginMethod: "owner-public",
           lastSignedIn: new Date(),
         });
-        user = (await db.getUserByOpenId(ENV.ownerOpenId)) ?? null;
+        user = (await db.getUserByOpenId(publicOwnerOpenId)) ?? null;
       }
     } catch (error) {
       console.error("[Auth] Failed to resolve public owner", error);
