@@ -17,8 +17,6 @@ describe("Vercel deployment configuration", () => {
       { source: "/manus-storage/:path*", destination: "/api/manus-storage/:path*" },
       { source: "/site/:slug/settings", destination: "/index.html" },
     ]));
-    const spaFallback = config.rewrites?.find((rewrite) => rewrite.destination === "/index.html" && rewrite.source.includes("api"));
-    expect(spaFallback?.source).toContain("(?!api");
-    expect(spaFallback?.source).toContain("manus-storage");
+    expect(config.rewrites?.some((rewrite) => rewrite.source === "/(.*)")).toBe(false);
   });
 });
