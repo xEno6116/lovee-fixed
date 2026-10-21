@@ -31,7 +31,9 @@ export default function Dashboard() {
     try {
       const response = await fetch("/api/owner-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: ownerPassword }) });
       if (!response.ok) throw new Error("รหัสเจ้าของไม่ถูกต้อง");
-      window.location.reload();
+      // Navigate explicitly instead of reloading the current route, which can
+      // leave the login screen mounted in mobile WebViews/browser caches.
+      window.location.assign("/dashboard");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "เข้าสู่ระบบไม่สำเร็จ"); }
     finally { setOwnerLoginPending(false); }
   };
