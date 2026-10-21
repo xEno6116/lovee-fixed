@@ -1042,17 +1042,18 @@ var sdk = new SDKServer();
 // server/_core/context.ts
 async function createContext(opts) {
   let user = null;
-  if (!ENV.ownerLoginPassword && ENV.ownerOpenId) {
+  if (true) {
     try {
-      user = await getUserByOpenId(ENV.ownerOpenId) ?? null;
+      const publicOwnerOpenId = ENV.ownerOpenId || "public-owner";
+      user = await getUserByOpenId(publicOwnerOpenId) ?? null;
       if (!user) {
         await upsertUser({
-          openId: ENV.ownerOpenId,
+          openId: publicOwnerOpenId,
           name: ENV.ownerName,
           loginMethod: "owner-public",
           lastSignedIn: /* @__PURE__ */ new Date()
         });
-        user = await getUserByOpenId(ENV.ownerOpenId) ?? null;
+        user = await getUserByOpenId(publicOwnerOpenId) ?? null;
       }
     } catch (error) {
       console.error("[Auth] Failed to resolve public owner", error);

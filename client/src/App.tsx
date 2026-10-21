@@ -11,6 +11,7 @@ import Settings from "./pages/Settings";
 function Router() {
   return <Switch>
     <Route path="/" component={Dashboard} />
+    <Route path="/dashboard" component={Dashboard} />
     <Route path="/site/:slug/settings">{(params) => <Settings slug={params.slug} />}</Route>
     <Route path="/site/:slug">{(params) => <Home slug={params.slug} />}</Route>
     <Route path="/404" component={NotFound} />
