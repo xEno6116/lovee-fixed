@@ -33,6 +33,10 @@ const settingsInput = z.object({
   pin: z.string().regex(/^\d{4}$/).optional(),
   musicUrl: z.string().url().or(z.literal("")),
   expiresAt: z.string().datetime({ offset: true }).nullable().optional(),
+  themeColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  backgroundStyle: z.enum(["soft", "sunset", "night", "paper"]).optional(),
+  themeMode: z.enum(["light", "night"]).optional(),
+  fontFamily: z.enum(["gaegu", "serif", "sans"]).optional(),
 });
 
 async function requireOwnedSite(ownerId: number, slug: string) {

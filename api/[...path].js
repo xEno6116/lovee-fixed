@@ -477,7 +477,11 @@ async function createSiteForOwner(ownerId, input) {
         musicUrl: "",
         expiresAt: null,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        themeColor: "#ec4899",
+        backgroundStyle: "soft",
+        themeMode: "light",
+        fontFamily: "gaegu"
       },
       assets: []
     };
@@ -521,7 +525,11 @@ function toPublicSiteData(site, unlocked) {
       memoryMessage: unlocked ? site.settings.memoryMessage : "",
       secretMessage: unlocked ? site.settings.secretMessage ?? "" : void 0,
       musicUrl: unlocked ? site.settings.musicUrl : "",
-      expiresAt
+      expiresAt,
+      themeColor: site.settings.themeColor ?? "#ec4899",
+      backgroundStyle: site.settings.backgroundStyle ?? "soft",
+      themeMode: site.settings.themeMode ?? "light",
+      fontFamily: site.settings.fontFamily ?? "gaegu"
     },
     locked,
     deletionAt: Number.isFinite(expiresAtMs) ? new Date(expiresAtMs + 3 * 864e5).toISOString() : null,
@@ -564,6 +572,10 @@ async function updateSiteSettings(siteId, input) {
       secretMessage: input.secretMessage ?? site.settings.secretMessage ?? "",
       startDate: input.startDate,
       musicUrl: input.musicUrl,
+      ...input.themeColor ? { themeColor: input.themeColor } : {},
+      ...input.backgroundStyle ? { backgroundStyle: input.backgroundStyle } : {},
+      ...input.themeMode ? { themeMode: input.themeMode } : {},
+      ...input.fontFamily ? { fontFamily: input.fontFamily } : {},
       ...input.expiresAt !== void 0 ? { expiresAt: input.expiresAt } : {},
       ...input.pin ? { pinHash: hashPin(input.pin) } : {},
       updatedAt: now
@@ -675,7 +687,11 @@ var settingsInput = z2.object({
   startDate: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   pin: z2.string().regex(/^\d{4}$/).optional(),
   musicUrl: z2.string().url().or(z2.literal("")),
-  expiresAt: z2.string().datetime({ offset: true }).nullable().optional()
+  expiresAt: z2.string().datetime({ offset: true }).nullable().optional(),
+  themeColor: z2.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  backgroundStyle: z2.enum(["soft", "sunset", "night", "paper"]).optional(),
+  themeMode: z2.enum(["light", "night"]).optional(),
+  fontFamily: z2.enum(["gaegu", "serif", "sans"]).optional()
 });
 async function requireOwnedSite(ownerId, slug) {
   const site = await getOwnedSiteBySlug(ownerId, slug);

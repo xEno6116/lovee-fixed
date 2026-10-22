@@ -18,6 +18,10 @@ type StoredSettings = {
   expiresAt?: string | null;
   createdAt: string;
   updatedAt: string;
+  themeColor?: string;
+  backgroundStyle?: "soft" | "sunset" | "night" | "paper";
+  themeMode?: "light" | "night";
+  fontFamily?: "gaegu" | "serif" | "sans";
 };
 
 type StoredAsset = {
@@ -200,6 +204,10 @@ export async function createSiteForOwner(ownerId: number, input: { title: string
         expiresAt: null,
         createdAt: now,
         updatedAt: now,
+        themeColor: "#ec4899",
+        backgroundStyle: "soft",
+        themeMode: "light",
+        fontFamily: "gaegu",
       },
       assets: [],
     };
@@ -249,6 +257,10 @@ function toPublicSiteData(site: StoredSite, unlocked: boolean) {
       secretMessage: unlocked ? site.settings.secretMessage ?? "" : undefined,
       musicUrl: unlocked ? site.settings.musicUrl : "",
       expiresAt,
+      themeColor: site.settings.themeColor ?? "#ec4899",
+      backgroundStyle: site.settings.backgroundStyle ?? "soft",
+      themeMode: site.settings.themeMode ?? "light",
+      fontFamily: site.settings.fontFamily ?? "gaegu",
     },
     locked,
     deletionAt: Number.isFinite(expiresAtMs) ? new Date(expiresAtMs + 3 * 86_400_000).toISOString() : null,
@@ -285,7 +297,7 @@ export async function verifySitePin(siteId: number, pin: string) {
   return Boolean(settings && settings.pinHash === hashPin(pin));
 }
 
-export async function updateSiteSettings(siteId: number, input: { memoryMessage: string; secretMessage?: string; startDate: string; pin?: string; musicUrl: string; expiresAt?: string | null }) {
+export async function updateSiteSettings(siteId: number, input: { memoryMessage: string; secretMessage?: string; startDate: string; pin?: string; musicUrl: string; expiresAt?: string | null; themeColor?: string; backgroundStyle?: StoredSettings["backgroundStyle"]; themeMode?: StoredSettings["themeMode"]; fontFamily?: StoredSettings["fontFamily"] }) {
   return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update settings ${siteId}`, (repository) => {
     const site = getSite(repository, siteId);
     if (!site) throw new Error("ไม่พบเว็บไซต์สำหรับบันทึกการตั้งค่า");
@@ -296,6 +308,10 @@ export async function updateSiteSettings(siteId: number, input: { memoryMessage:
       secretMessage: input.secretMessage ?? site.settings.secretMessage ?? "",
       startDate: input.startDate,
       musicUrl: input.musicUrl,
+      ...(input.themeColor ? { themeColor: input.themeColor } : {}),
+      ...(input.backgroundStyle ? { backgroundStyle: input.backgroundStyle } : {}),
+      ...(input.themeMode ? { themeMode: input.themeMode } : {}),
+      ...(input.fontFamily ? { fontFamily: input.fontFamily } : {}),
       ...(input.expiresAt !== undefined ? { expiresAt: input.expiresAt } : {}),
       ...(input.pin ? { pinHash: hashPin(input.pin) } : {}),
       updatedAt: now,

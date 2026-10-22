@@ -126,9 +126,11 @@ export default function Home({ slug }: { slug: string }) {
   if (site.locked) return <div className="legacy-lock-screen"><div className="legacy-admin-box text-center"><h2>เว็บไซต์ถูกล็อกแล้ว</h2><p className="legacy-admin-note">เว็บไซต์นี้หมดอายุและจะลบข้อมูลกับสื่อโดยอัตโนมัติเมื่อครบกำหนด</p><div className="legacy-clock justify-center my-6"><ClockBox value={deletionClock.days} label="วัน" /><ClockBox value={deletionClock.hours} label="ชั่วโมง" /><ClockBox value={deletionClock.minutes} label="นาที" /><ClockBox value={deletionClock.seconds} label="วินาที" /></div><p className="legacy-admin-note">กรุณาติดต่อเจ้าของเว็บไซต์เพื่อขอต่ออายุ</p></div></div>;
 
   const photos = site.images;
+  const themeBackground = { soft: "#fff5f7", sunset: "#fff7ed", night: "#0f172a", paper: "#fefce8" }[site.settings.backgroundStyle ?? "soft"];
+  const themeFont = { gaegu: "'Gaegu', 'Noto Sans Thai', sans-serif", serif: "Georgia, 'Noto Serif Thai', serif", sans: "system-ui, 'Noto Sans Thai', sans-serif" }[site.settings.fontFamily ?? "gaegu"];
   const movePhoto = (direction: number) => { if (photos.length) setPhotoIndex((index) => (index + direction + photos.length) % photos.length); };
 
-  return <div className="legacy-anniversary min-h-screen bg-[#fff5f7]">
+  return <div className="legacy-anniversary min-h-screen" style={{ backgroundColor: themeBackground, color: site.settings.themeMode === "night" ? "#f8fafc" : undefined, fontFamily: themeFont }}>
     <audio ref={audioRef} src={site.settings.musicUrl || undefined} loop onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} />
     {!unlocked && <section className="legacy-lock-screen">
       <Link href={`/site/${slug}/settings`} className="legacy-settings-trigger" aria-label="Settings"><Settings size={20} /></Link>
