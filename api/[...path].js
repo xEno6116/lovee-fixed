@@ -357,7 +357,7 @@ function appendHashSuffix(relKey) {
 async function storagePrepareUpload(relKey, contentType = "application/octet-stream") {
   const key = appendHashSuffix(normalizeKey(relKey));
   if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
-    return { key, uploadUrl: `/api/media-upload?key=${encodeURIComponent(key)}`, url: `/manus-storage/${key}` };
+    return { key, uploadUrl: `/api/media-upload?key=${encodeURIComponent(key)}`, url: `/api/media-download?key=${encodeURIComponent(key)}` };
   }
   const { forgeUrl, forgeKey } = getForgeConfig();
   const presignUrl = new URL("v1/storage/presign/put", forgeUrl + "/");
@@ -1275,6 +1275,23 @@ function createApp() {
     } catch (error) {
       console.error("[MediaUpload] failed", error);
       res.status(500).send("Media upload failed");
+    }
+  });
+  app.get("/api/media-download", async (req, res) => {
+    const key = typeof req.query.key === "string" ? req.query.key : "";
+    if (!key || !/^anniversary\/[\w./-]+$/.test(key)) {
+      res.status(400).send("Invalid media key");
+      return;
+    }
+    try {
+      const response = await readBinary(`media/${key}`);
+      res.set("Cache-Control", "public, max-age=31536000, immutable");
+      const lower = key.toLowerCase();
+      const mime = lower.endsWith(".png") ? "image/png" : lower.endsWith(".jpg") || lower.endsWith(".jpeg") ? "image/jpeg" : lower.endsWith(".webp") ? "image/webp" : lower.endsWith(".mp4") ? "video/mp4" : lower.endsWith(".mp3") ? "audio/mpeg" : "application/octet-stream";
+      res.type(mime);
+      res.send(Buffer.from(await response.arrayBuffer()));
+    } catch {
+      res.status(404).send("Media not found");
     }
   });
   app.use(express.json({ limit: "50mb" }));

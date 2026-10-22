@@ -35,7 +35,7 @@ export async function storagePrepareUpload(
 ): Promise<{ key: string; uploadUrl: string; url: string }> {
   const key = appendHashSuffix(normalizeKey(relKey));
   if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
-    return { key, uploadUrl: `/api/media-upload?key=${encodeURIComponent(key)}`, url: `/manus-storage/${key}` };
+    return { key, uploadUrl: `/api/media-upload?key=${encodeURIComponent(key)}`, url: `/api/media-download?key=${encodeURIComponent(key)}` };
   }
   const { forgeUrl, forgeKey } = getForgeConfig();
   const presignUrl = new URL("v1/storage/presign/put", forgeUrl + "/");
