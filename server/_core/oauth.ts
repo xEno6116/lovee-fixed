@@ -16,7 +16,7 @@ export function registerOAuthRoutes(app: Express) {
   app.post("/api/owner-login", async (req: Request, res: Response) => {
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     const expected = ENV.ownerLoginPassword;
-    const matches = /^\d{4,12}$/.test(expected) && /^\d{4,12}$/.test(password) && password.length === expected.length
+    const matches = Boolean(expected && password && password.length === expected.length)
       ? timingSafeEqual(Buffer.from(password), Buffer.from(expected))
       : false;
     if (!matches || !ENV.ownerOpenId) {

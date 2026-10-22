@@ -1070,7 +1070,7 @@ function registerOAuthRoutes(app) {
   app.post("/api/owner-login", async (req, res) => {
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     const expected = ENV.ownerLoginPassword;
-    const matches = /^\d{4,12}$/.test(expected) && /^\d{4,12}$/.test(password) && password.length === expected.length ? timingSafeEqual(Buffer.from(password), Buffer.from(expected)) : false;
+    const matches = Boolean(expected && password && password.length === expected.length) ? timingSafeEqual(Buffer.from(password), Buffer.from(expected)) : false;
     if (!matches || !ENV.ownerOpenId) {
       res.status(401).json({ error: "\u0E23\u0E2B\u0E31\u0E2A\u0E40\u0E08\u0E49\u0E32\u0E02\u0E2D\u0E07\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07" });
       return;
