@@ -88,7 +88,7 @@ export default function Home({ slug }: { slug: string }) {
       const recaptchaEnabled = Boolean(import.meta.env.VITE_RECAPTCHA_SITE_KEY);
       const recaptchaToken = window.grecaptcha?.getResponse(captchaWidget.current ?? undefined) ?? "";
       if (recaptchaEnabled && !recaptchaToken) { setError("กรุณาติ๊กยืนยันว่าไม่ใช่บอทก่อน"); setPin(""); return; }
-      verifyPin.mutate({ slug, pin: next, recaptchaToken }, {
+      verifyPin.mutate({ slug, pin: next, ...(recaptchaEnabled ? { recaptchaToken } : {}) }, {
       onSuccess: ({ valid, secretMessage: verifiedSecretMessage }) => {
         if (valid) { setSecretMessage(verifiedSecretMessage ?? ""); setUnlocked(true); setPin(""); }
         else { setError("การยืนยันไม่ผ่าน หรือ PIN ไม่ถูกต้อง"); window.setTimeout(() => setPin(""), 450); window.grecaptcha?.reset(captchaWidget.current ?? undefined); }
