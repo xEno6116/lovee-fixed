@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link } from "wouter";
-import { ChevronLeft, ChevronRight, Pause, Play, Settings, Video } from "lucide-react";
+import { ChevronLeft, ChevronRight, Heart, LockKeyhole, Orbit, Pause, Play, Settings, Sparkles, Video } from "lucide-react";
+import CosmicBackdrop from "@/components/CosmicBackdrop";
 import { trpc } from "@/lib/trpc";
 
 declare global {
@@ -18,12 +19,13 @@ function elapsedFrom(startDate: string): TimeParts {
 }
 
 function remainingUntil(target: string): TimeParts {
-  const difference = Math.max(0, new Date(target).getTime() - Date.now());
+  const targetTime = Date.parse(target);
+  const difference = Number.isFinite(targetTime) ? Math.max(0, targetTime - Date.now()) : 0;
   return { days: Math.floor(difference / 86_400_000), hours: Math.floor((difference / 3_600_000) % 24), minutes: Math.floor((difference / 60_000) % 60), seconds: Math.floor((difference / 1_000) % 60) };
 }
 
 function ClockBox({ value, label }: { value: number; label: string }) {
-  return <div className="legacy-clock-box"><strong>{value}</strong><span>{label}</span></div>;
+  return <div className="memory-clock-box"><strong>{String(value).padStart(2, "0")}</strong><span>{label}</span></div>;
 }
 
 export default function Home({ slug }: { slug: string }) {
@@ -77,15 +79,20 @@ export default function Home({ slug }: { slug: string }) {
     return () => window.clearInterval(timer);
   }, [site?.site.id]);
 
+  const resetCaptcha = () => {
+    if (captchaWidget.current !== null && window.grecaptcha) window.grecaptcha.reset(captchaWidget.current);
+  };
+
   const verifyPublicPin = async (candidate: string) => {
     if (verifying || candidate.length !== 4) return;
     setVerifying(true);
     setError("");
     try {
+      const recaptchaToken = captchaWidget.current !== null && window.grecaptcha ? window.grecaptcha.getResponse(captchaWidget.current) : "";
       const response = await fetch("/api/trpc/site.public.unlock?batch=1", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 0: { json: { slug, pin: candidate } } }),
+        body: JSON.stringify({ 0: { json: { slug, pin: candidate, ...(recaptchaToken ? { recaptchaToken } : {}) } } }),
       });
       const payload = await response.json().catch(() => null);
       const result = payload?.[0]?.result?.data?.json as { valid?: boolean; data?: typeof siteQuery.data } | undefined;
@@ -97,10 +104,12 @@ export default function Home({ slug }: { slug: string }) {
       } else {
         setError("การยืนยันไม่ผ่าน หรือ PIN ไม่ถูกต้อง");
         setPin("");
+        resetCaptcha();
       }
     } catch {
-      setError("ตรวจสอบ PIN ไม่สำเร็จ");
+      setError("ตรวจสอบ PIN ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
       setPin("");
+      resetCaptcha();
     } finally {
       setVerifying(false);
     }
@@ -111,45 +120,59 @@ export default function Home({ slug }: { slug: string }) {
     const next = `${pin}${digit}`;
     setPin(next);
     setError("");
-    if (next.length === 4) {
-      void verifyPublicPin(next);
-    }
+    if (next.length === 4) void verifyPublicPin(next);
   };
+
+  useEffect(() => {
+    if (unlocked) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key >= "0" && event.key <= "9") pressNumber(event.key);
+      if (event.key === "Backspace") { setPin((value) => value.slice(0, -1)); setError(""); }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  });
 
   const toggleMusic = async () => {
     const audio = audioRef.current;
     if (!audio || !site?.settings.musicUrl) return;
-    try { if (audio.paused) { await audio.play(); setPlaying(true); } else { audio.pause(); setPlaying(false); } } catch { setPlaying(false); }
+    try {
+      if (audio.paused) { await audio.play(); setPlaying(true); } else { audio.pause(); setPlaying(false); }
+    } catch { setPlaying(false); }
   };
 
-  if (siteQuery.isLoading) return <div className="legacy-loading">กำลังเปิดความทรงจำ…</div>;
-  if (!site) return <div className="legacy-loading">ไม่สามารถเปิดเว็บไซต์นี้ได้</div>;
-  if (site.locked) return <div className="legacy-lock-screen"><div className="legacy-admin-box text-center"><h2>เว็บไซต์ถูกล็อกแล้ว</h2><p className="legacy-admin-note">เว็บไซต์นี้หมดอายุและจะลบข้อมูลกับสื่อโดยอัตโนมัติเมื่อครบกำหนด</p><div className="legacy-clock justify-center my-6"><ClockBox value={deletionClock.days} label="วัน" /><ClockBox value={deletionClock.hours} label="ชั่วโมง" /><ClockBox value={deletionClock.minutes} label="นาที" /><ClockBox value={deletionClock.seconds} label="วินาที" /></div><p className="legacy-admin-note">กรุณาติดต่อเจ้าของเว็บไซต์เพื่อขอต่ออายุ</p></div></div>;
+  if (siteQuery.isLoading) return <div className="cosmic-app-shell cosmic-center-shell"><CosmicBackdrop /><div className="cosmic-loading-card"><Sparkles size={22} />กำลังตามหาความทรงจำ…</div></div>;
+  if (!site) return <div className="cosmic-app-shell cosmic-center-shell"><CosmicBackdrop /><div className="cosmic-access-card"><Orbit size={30} /><h1>ไม่พบความทรงจำนี้</h1><p>ลิงก์อาจไม่ถูกต้อง หรือเว็บไซต์นี้ไม่มีอยู่แล้ว</p></div></div>;
+  if (site.locked) return <div className="cosmic-app-shell cosmic-center-shell"><CosmicBackdrop /><div className="memory-expired-card"><LockKeyhole size={29} /><span className="cosmic-eyebrow">ORBIT PAUSED</span><h1>เว็บไซต์ถูกล็อกแล้ว</h1><p>เว็บไซต์นี้หมดอายุและจะลบข้อมูลกับสื่อโดยอัตโนมัติเมื่อครบกำหนด</p><div className="memory-clock memory-clock-compact"><ClockBox value={deletionClock.days} label="วัน" /><ClockBox value={deletionClock.hours} label="ชม." /><ClockBox value={deletionClock.minutes} label="นาที" /><ClockBox value={deletionClock.seconds} label="วินาที" /></div><small>กรุณาติดต่อเจ้าของเว็บไซต์เพื่อต่ออายุ</small></div></div>;
 
   const photos = site.images;
-  const themeBackground = { soft: "#fff5f7", sunset: "#fff7ed", night: "#0f172a", paper: "#fefce8" }[site.settings.backgroundStyle ?? "soft"];
-  const themeFont = { gaegu: "'Gaegu', 'Noto Sans Thai', sans-serif", serif: "Georgia, 'Noto Serif Thai', serif", sans: "system-ui, 'Noto Sans Thai', sans-serif" }[site.settings.fontFamily ?? "gaegu"];
+  const backgroundStyle = site.settings.backgroundStyle ?? "night";
+  const themeFont = { gaegu: "'Gaegu', 'Noto Sans Thai', sans-serif", serif: "Georgia, 'Noto Serif Thai', serif", sans: "'DM Sans', 'Noto Sans Thai', sans-serif" }[site.settings.fontFamily ?? "sans"];
+  const siteStyle = { "--site-accent": site.settings.themeColor ?? "#8b5cf6", fontFamily: themeFont } as CSSProperties;
   const movePhoto = (direction: number) => { if (photos.length) setPhotoIndex((index) => (index + direction + photos.length) % photos.length); };
 
-  return <div className="legacy-anniversary min-h-screen" style={{ backgroundColor: themeBackground, color: site.settings.themeMode === "night" ? "#f8fafc" : undefined, fontFamily: themeFont }}>
+  return <div className={`memory-site memory-tone-${backgroundStyle} ${site.settings.themeMode === "light" ? "memory-light" : ""}`} style={siteStyle}>
+    <CosmicBackdrop />
     <audio ref={audioRef} src={site.settings.musicUrl || undefined} loop onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} />
-    {!unlocked && <section className="legacy-lock-screen">
-      <Link href={`/site/${slug}/settings`} className="legacy-settings-trigger" aria-label="Settings"><Settings size={20} /></Link>
-      <div className="mb-10 text-center"><h2>{site.site.title}</h2></div>
-      <div ref={captchaRef} className="flex justify-center mb-5" aria-label="ยืนยันว่าไม่ใช่บอท" />
-      <div className="legacy-dots" aria-label="PIN progress">{Array.from({ length: 4 }, (_, index) => <span key={index} className={index < pin.length ? "active" : ""} />)}</div>
-      <div className="legacy-keypad">{Array.from({ length: 9 }, (_, index) => <button type="button" key={index + 1} className="legacy-key-btn" onClick={() => pressNumber(String(index + 1))}>{index + 1}</button>)}<span /><button type="button" className="legacy-key-btn" onClick={() => pressNumber("0")}>0</button><button type="button" className="legacy-key-btn soft" onClick={() => setPin((value) => value.slice(0, -1))} aria-label="ลบตัวเลข">←</button></div>
-      {pin.length === 4 && <button type="button" className="legacy-save-btn mt-4" onClick={() => void verifyPublicPin(pin)} disabled={verifying}>{verifying ? "กำลังตรวจสอบ…" : "ยืนยัน PIN"}</button>}
-      <p className="legacy-lock-error">{verifying ? "กำลังตรวจสอบ…" : error}</p>
-    </section>}
-    {unlocked && <main className="legacy-main-content">
-      <header className="legacy-header"><h1>{site.site.title}</h1><div className="legacy-clock"><ClockBox value={clock.days} label="วัน" /><ClockBox value={clock.hours} label="ชั่วโมง" /><ClockBox value={clock.minutes} label="นาที" /><ClockBox value={clock.seconds} label="วินาที" /></div></header>
-      <section className="legacy-section legacy-video-section"><div className="legacy-section-inner"><h3>วิดีโอ 🎬</h3><p className="legacy-section-hint">เลื่อนด้วยลูกศรเพื่อดูช่องวิดีโอทั้ง 4 ช่อง</p><div className="legacy-video-shell"><button type="button" className="legacy-arrow legacy-arrow-prev" onClick={() => setVideoIndex((index) => (index + 3) % 4)} aria-label="ช่องวิดีโอก่อนหน้า"><ChevronLeft size={22} /></button><div className="legacy-video-viewport"><div className="legacy-video-track" style={{ transform: `translateX(-${videoIndex * 100}%)` }}>{videoSlots.map((asset, index) => <div className="legacy-video-slide" key={asset?.id ?? `slot-${index}`}>{asset ? <video className="size-full object-contain bg-slate-950" controls playsInline src={asset.url} /> : <div className="legacy-empty-media"><Video size={34} /><strong>ช่องวิดีโอ {index + 1}</strong><span>ยังไม่มีไฟล์</span></div>}</div>)}</div></div><button type="button" className="legacy-arrow legacy-arrow-next" onClick={() => setVideoIndex((index) => (index + 1) % 4)} aria-label="ช่องวิดีโอถัดไป"><ChevronRight size={22} /></button></div><p className="legacy-counter">{videoIndex + 1}/4</p></div></section>
-      <section className="legacy-section legacy-message-section"><div className="legacy-glass-card"><p>{site.settings.memoryMessage}</p></div></section>
-      {secretMessage && <section className="legacy-section legacy-message-section"><div className="legacy-glass-card"><h3>ข้อความลับ</h3><p>{secretMessage}</p></div></section>}
-      <section className="legacy-section legacy-gallery-section"><h3>รูปที่คบกัน 📸</h3><div className="legacy-photo-slider"><button type="button" className="legacy-arrow legacy-photo-prev" onClick={() => movePhoto(-1)} disabled={!photos.length} aria-label="รูปก่อนหน้า"><ChevronLeft size={22} /></button><div className="legacy-photo-viewport"><div className="legacy-photo-track" style={{ transform: `translateX(-${photoIndex * 100}%)` }}>{photos.length ? photos.map((asset) => <div className="legacy-photo-slide" key={asset.id}><img src={asset.url} alt={asset.originalName} /></div>) : <div className="legacy-photo-slide"><div className="legacy-empty-photo">ยังไม่มีรูปภาพ</div></div>}</div></div><button type="button" className="legacy-arrow legacy-photo-next" onClick={() => movePhoto(1)} disabled={!photos.length} aria-label="รูปถัดไป"><ChevronRight size={22} /></button></div></section>
-      <footer className="legacy-footer">อยู่ด้วยกันตลอดไปนะ 💖🌷</footer>
+    {!unlocked && <section className="memory-unlock-screen"><Link href={`/site/${slug}/settings`} className="memory-settings-link" aria-label="ตั้งค่าเว็บไซต์"><Settings size={17} /></Link><div className="memory-unlock-card">
+      <div className="memory-unlock-symbol"><Heart size={22} fill="currentColor" /><i /></div><span className="cosmic-eyebrow">PRIVATE CONSTELLATION</span><h1>{site.site.title}</h1><p>ใส่รหัส 4 หลักเพื่อเปิดพิกัดความทรงจำของเรา</p>
+      <div ref={captchaRef} className="memory-captcha" aria-label="ยืนยันว่าไม่ใช่บอท" />
+      <div className="memory-pin-dots" aria-label={`กรอก PIN แล้ว ${pin.length} จาก 4 หลัก`}>{Array.from({ length: 4 }, (_, index) => <span key={index} className={index < pin.length ? "is-filled" : ""} />)}</div>
+      <div className="memory-keypad" role="group" aria-label="แป้นตัวเลข PIN">{Array.from({ length: 9 }, (_, index) => <button type="button" key={index + 1} onClick={() => pressNumber(String(index + 1))}>{index + 1}</button>)}<span /><button type="button" onClick={() => pressNumber("0")}>0</button><button type="button" className="memory-keypad-clear" onClick={() => { setPin((value) => value.slice(0, -1)); setError(""); }} aria-label="ลบตัวเลขล่าสุด">←</button></div>
+      {pin.length === 4 && <button type="button" className="cosmic-primary-button memory-verify-button" onClick={() => void verifyPublicPin(pin)} disabled={verifying}>{verifying ? "กำลังตรวจสอบ…" : "ยืนยัน PIN"}</button>}
+      <p className="memory-unlock-error" role="alert" aria-live="polite">{verifying ? "กำลังเปิดประตูสู่ความทรงจำ…" : error}</p>
+    </div></section>}
+
+    {unlocked && <main className="memory-content">
+      <header className="memory-hero"><div className="memory-hero-copy"><span className="cosmic-eyebrow"><Sparkles size={15} /> OUR STORY IN ORBIT</span><h1>{site.site.title}</h1><p>ทุกวินาทีที่ผ่านไป ยังอยู่ในวงโคจรของเราเสมอ</p><div className="memory-clock"><ClockBox value={clock.days} label="วัน" /><ClockBox value={clock.hours} label="ชั่วโมง" /><ClockBox value={clock.minutes} label="นาที" /><ClockBox value={clock.seconds} label="วินาที" /></div></div><div className="memory-hero-orbit" aria-hidden="true"><span /><i /><b>∞</b></div></header>
+      <div className="memory-page-grid">
+        <section className="memory-panel memory-video-panel"><div className="memory-section-heading"><div><span className="cosmic-section-kicker">MOTION MEMORY</span><h2><Video size={20} /> วิดีโอของเรา</h2></div><span>{videoIndex + 1} / 4</span></div><div className="memory-carousel-shell"><button type="button" className="memory-arrow memory-arrow-prev" onClick={() => setVideoIndex((index) => (index + 3) % 4)} aria-label="ช่องวิดีโอก่อนหน้า"><ChevronLeft size={20} /></button><div className="memory-video-viewport"><div className="memory-video-track" style={{ transform: `translateX(-${videoIndex * 100}%)` }}>{videoSlots.map((asset, index) => <div className="memory-video-slide" key={asset?.id ?? `slot-${index}`}>{asset ? <video className="memory-video" controls playsInline preload="metadata" src={asset.url} /> : <div className="memory-empty-media"><Video size={33} /><strong>ช่องวิดีโอ {index + 1}</strong><span>รอเรื่องราวบทต่อไป</span></div>}</div>)}</div></div><button type="button" className="memory-arrow memory-arrow-next" onClick={() => setVideoIndex((index) => (index + 1) % 4)} aria-label="ช่องวิดีโอถัดไป"><ChevronRight size={20} /></button></div><div className="memory-slider-dots">{videoSlots.map((_, index) => <button key={index} className={index === videoIndex ? "is-active" : ""} onClick={() => setVideoIndex(index)} aria-label={`ดูวิดีโอช่อง ${index + 1}`} />)}</div></section>
+        <section className="memory-message-panel"><span className="cosmic-section-kicker">A SMALL UNIVERSE</span><Heart size={22} fill="currentColor" /><p>{site.settings.memoryMessage}</p><i className="memory-message-star">✦</i></section>
+        {secretMessage && <section className="memory-secret-panel"><LockKeyhole size={17} /><div><span>UNLOCKED NOTE</span><p>{secretMessage}</p></div></section>}
+        <section className="memory-panel memory-gallery-panel"><div className="memory-section-heading"><div><span className="cosmic-section-kicker">PHOTO DUST</span><h2><Sparkles size={19} /> รูปที่คบกัน</h2></div>{photos.length ? <span>{photoIndex + 1} / {photos.length}</span> : null}</div><div className="memory-photo-shell"><button type="button" className="memory-arrow memory-photo-prev" onClick={() => movePhoto(-1)} disabled={!photos.length} aria-label="รูปก่อนหน้า"><ChevronLeft size={20} /></button><div className="memory-photo-viewport"><div className="memory-photo-track" style={{ transform: `translateX(-${photoIndex * 100}%)` }}>{photos.length ? photos.map((asset) => <div className="memory-photo-slide" key={asset.id}><img src={asset.url} alt={asset.originalName} loading="lazy" /></div>) : <div className="memory-photo-slide"><div className="memory-empty-photo"><Sparkles size={30} />ยังไม่มีรูปภาพ</div></div>}</div></div><button type="button" className="memory-arrow memory-photo-next" onClick={() => movePhoto(1)} disabled={!photos.length} aria-label="รูปถัดไป"><ChevronRight size={20} /></button></div></section>
+      </div>
+      <footer className="memory-footer"><span /><p>อยู่ด้วยกันตลอดไปนะ</p><span /></footer>
     </main>}
-    {unlocked && <div className={`legacy-cd-player ${playing ? "playing" : ""}`}><div className="legacy-cd-case"><div className="legacy-cd-disc"><div className="legacy-cd-center" /></div></div><div><p className="legacy-cd-label">Our Song ❤️</p><button type="button" className="legacy-cd-button" onClick={toggleMusic} disabled={!site.settings.musicUrl} aria-label="เล่นหรือหยุดเพลง">{playing ? <Pause size={13} /> : <Play size={13} fill="currentColor" />}</button></div></div>}
+    {unlocked && <div className={`memory-music-dock ${playing ? "is-playing" : ""}`}><button type="button" className="memory-record-button" onClick={toggleMusic} disabled={!site.settings.musicUrl} aria-label="เล่นหรือหยุดเพลง"><span><i /></span></button><div><small>OUR SOUNDTRACK</small><p>{site.settings.musicUrl ? "Our Song" : "ยังไม่มีเพลง"}</p></div><button type="button" className="memory-play-button" onClick={toggleMusic} disabled={!site.settings.musicUrl} aria-label="เล่นหรือหยุดเพลง">{playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}</button></div>}
   </div>;
 }

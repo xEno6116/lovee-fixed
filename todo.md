@@ -74,3 +74,7 @@
 - [ ] ตรวจ production build และทดสอบ serverless entry point โดยไม่ใช้ MySQL
 - [ ] ทดสอบ api serverless entry โดยตรงและตรวจ SPA fallback routes บน Vercel config
 - [x] จัดทำรายการ environment variables สำหรับ Vercel และตรวจ build/test เมื่อไม่มี DATABASE_URL
+- [x] ปรับหน้า login และแดชบอร์ดหลังบ้านให้เป็น Galaxy Memory UI ที่ responsive พร้อมสถานะ loading/error ที่อ่านง่าย โดยคง auth และ mutation เดิม
+- [x] ปรับหน้า Settings เป็น cosmic control room พร้อมระบบ glass panel, upload/delete feedback และ layout ที่ไม่ล้นบนมือถือ โดยคง API contract เดิม
+- [x] ปรับหน้า public memory เป็นธีมกาแล็กซี เพิ่ม starfield/orbit/glow, PIN unlock feedback, media controls และ reduced-motion fallback โดยคงข้อมูลและฟีเจอร์เดิม
+- [ ] ตรวจ TypeScript, build, test และตรวจ route manifest หลังการปรับ UI พร้อม push ขึ้น branch master ให้ Vercel deploy
