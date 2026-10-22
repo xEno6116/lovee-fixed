@@ -19,8 +19,12 @@ export function registerOAuthRoutes(app: Express) {
     const matches = Boolean(expected && password && password.length === expected.length)
       ? timingSafeEqual(Buffer.from(password), Buffer.from(expected))
       : false;
+    if (!expected) {
+      res.status(503).json({ error: "ยังไม่ได้ตั้งค่ารหัสเจ้าของบน Vercel" });
+      return;
+    }
     if (!matches || !ENV.ownerOpenId) {
-      res.status(401).json({ error: "รหัสเจ้าของไม่ถูกต้อง" });
+      res.status(401).json({ error: "รหัสเจ้าของไม่ถูกต้อง หรือยังไม่ได้ตั้งค่า OWNER_OPEN_ID" });
       return;
     }
     try {
