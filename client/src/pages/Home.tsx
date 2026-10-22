@@ -27,11 +27,11 @@ function ClockBox({ value, label }: { value: number; label: string }) {
 
 export default function Home({ slug }: { slug: string }) {
   const siteQuery = trpc.site.public.get.useQuery({ slug });
-  const verifyPin = trpc.site.public.unlock.useMutation();
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [secretMessage, setSecretMessage] = useState("");
   const [unlocked, setUnlocked] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [unlockedSite, setUnlockedSite] = useState<typeof siteQuery.data>();
   const [clock, setClock] = useState<TimeParts>({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   const [deletionClock, setDeletionClock] = useState<TimeParts>({ days: 0, hours: 0, minutes: 0, seconds: 0 });
@@ -76,22 +76,42 @@ export default function Home({ slug }: { slug: string }) {
     return () => window.clearInterval(timer);
   }, [site?.site.id]);
 
+  const verifyPublicPin = async (candidate: string) => {
+    if (verifying || candidate.length !== 4) return;
+    setVerifying(true);
+    setError("");
+    try {
+      const response = await fetch("/api/trpc/site.public.unlock?batch=1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 0: { json: { slug, pin: candidate } } }),
+      });
+      const payload = await response.json().catch(() => null);
+      const result = payload?.[0]?.result?.data?.json as { valid?: boolean; data?: typeof siteQuery.data } | undefined;
+      if (response.ok && result?.valid && result.data) {
+        setUnlockedSite(result.data);
+        setSecretMessage(result.data.settings.secretMessage ?? "");
+        setUnlocked(true);
+        setPin("");
+      } else {
+        setError("การยืนยันไม่ผ่าน หรือ PIN ไม่ถูกต้อง");
+        setPin("");
+      }
+    } catch {
+      setError("ตรวจสอบ PIN ไม่สำเร็จ");
+      setPin("");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const pressNumber = (digit: string) => {
-    if (verifyPin.isPending || pin.length >= 4) return;
+    if (verifying || pin.length >= 4) return;
     const next = `${pin}${digit}`;
     setPin(next);
     setError("");
     if (next.length === 4) {
-      const recaptchaEnabled = Boolean(import.meta.env.VITE_RECAPTCHA_SITE_KEY);
-      const recaptchaToken = window.grecaptcha?.getResponse(captchaWidget.current ?? undefined) ?? "";
-      if (recaptchaEnabled && !recaptchaToken) { setError("กรุณาติ๊กยืนยันว่าไม่ใช่บอทก่อน"); setPin(""); return; }
-      verifyPin.mutate({ slug, pin: next, ...(recaptchaEnabled ? { recaptchaToken } : {}) }, {
-      onSuccess: ({ valid, data }) => {
-        if (valid && data) { setUnlockedSite(data); setSecretMessage(data.settings.secretMessage ?? ""); setUnlocked(true); setPin(""); }
-        else { setError("การยืนยันไม่ผ่าน หรือ PIN ไม่ถูกต้อง"); window.setTimeout(() => setPin(""), 450); window.grecaptcha?.reset(captchaWidget.current ?? undefined); }
-      },
-      onError: () => { setError("ตรวจสอบ PIN ไม่สำเร็จ"); setPin(""); window.grecaptcha?.reset(captchaWidget.current ?? undefined); },
-      });
+      void verifyPublicPin(next);
     }
   };
 
@@ -116,7 +136,8 @@ export default function Home({ slug }: { slug: string }) {
       <div ref={captchaRef} className="flex justify-center mb-5" aria-label="ยืนยันว่าไม่ใช่บอท" />
       <div className="legacy-dots" aria-label="PIN progress">{Array.from({ length: 4 }, (_, index) => <span key={index} className={index < pin.length ? "active" : ""} />)}</div>
       <div className="legacy-keypad">{Array.from({ length: 9 }, (_, index) => <button type="button" key={index + 1} className="legacy-key-btn" onClick={() => pressNumber(String(index + 1))}>{index + 1}</button>)}<span /><button type="button" className="legacy-key-btn" onClick={() => pressNumber("0")}>0</button><button type="button" className="legacy-key-btn soft" onClick={() => setPin((value) => value.slice(0, -1))} aria-label="ลบตัวเลข">←</button></div>
-      <p className="legacy-lock-error">{verifyPin.isPending ? "กำลังตรวจสอบ…" : error}</p>
+      {pin.length === 4 && <button type="button" className="legacy-save-btn mt-4" onClick={() => void verifyPublicPin(pin)} disabled={verifying}>{verifying ? "กำลังตรวจสอบ…" : "ยืนยัน PIN"}</button>}
+      <p className="legacy-lock-error">{verifying ? "กำลังตรวจสอบ…" : error}</p>
     </section>}
     {unlocked && <main className="legacy-main-content">
       <header className="legacy-header"><h1>{site.site.title}</h1><div className="legacy-clock"><ClockBox value={clock.days} label="วัน" /><ClockBox value={clock.hours} label="ชั่วโมง" /><ClockBox value={clock.minutes} label="นาที" /><ClockBox value={clock.seconds} label="วินาที" /></div></header>
