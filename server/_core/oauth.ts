@@ -23,8 +23,12 @@ export function registerOAuthRoutes(app: Express) {
       res.status(503).json({ error: "ยังไม่ได้ตั้งค่ารหัสเจ้าของบน Vercel" });
       return;
     }
-    if (!matches || !ENV.ownerOpenId) {
-      res.status(401).json({ error: "รหัสเจ้าของไม่ถูกต้อง หรือยังไม่ได้ตั้งค่า OWNER_OPEN_ID" });
+    if (!ENV.ownerOpenId) {
+      res.status(503).json({ error: "ระบบยังไม่ได้ตั้งค่า OWNER_OPEN_ID บน Vercel" });
+      return;
+    }
+    if (!matches) {
+      res.status(401).json({ error: "รหัสเจ้าของไม่ถูกต้อง" });
       return;
     }
     try {
