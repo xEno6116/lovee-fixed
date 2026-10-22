@@ -154,8 +154,8 @@ export default function Home({ slug }: { slug: string }) {
   return <div className={`memory-site memory-tone-${backgroundStyle} ${site.settings.themeMode === "light" ? "memory-light" : ""}`} style={siteStyle}>
     <CosmicBackdrop />
     <audio ref={audioRef} src={site.settings.musicUrl || undefined} loop onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} />
-    {!unlocked && <section className="memory-unlock-screen"><Link href={`/site/${slug}/settings`} className="memory-settings-link" aria-label="ตั้งค่าเว็บไซต์"><Settings size={17} /></Link><div className="memory-unlock-card">
-      <div className="memory-unlock-symbol"><Heart size={22} fill="currentColor" /><i /></div><span className="cosmic-eyebrow">PRIVATE CONSTELLATION</span><h1>{site.site.title}</h1><p>ใส่รหัส 4 หลักเพื่อเปิดพิกัดความทรงจำของเรา</p>
+    {!unlocked && <section className="memory-unlock-screen memory-gateway-theme"><Link href={`/site/${slug}/settings`} className="memory-settings-link" aria-label="ตั้งค่าเว็บไซต์"><Settings size={17} /></Link><div className="memory-unlock-card">
+      <div className="memory-unlock-symbol"><Heart size={22} fill="currentColor" /><i /></div><span className="cosmic-eyebrow">SECURE MEMORY GATEWAY</span><h1>{site.site.title}</h1><p>ยืนยันตัวตนเพื่อเริ่มการเชื่อมต่อกับจักรวาลความทรงจำของเรา</p>
       <div ref={captchaRef} className="memory-captcha" aria-label="ยืนยันว่าไม่ใช่บอท" />
       <div className="memory-pin-dots" aria-label={`กรอก PIN แล้ว ${pin.length} จาก 4 หลัก`}>{Array.from({ length: 4 }, (_, index) => <span key={index} className={index < pin.length ? "is-filled" : ""} />)}</div>
       <div className="memory-keypad" role="group" aria-label="แป้นตัวเลข PIN">{Array.from({ length: 9 }, (_, index) => <button type="button" key={index + 1} onClick={() => pressNumber(String(index + 1))}>{index + 1}</button>)}<span /><button type="button" onClick={() => pressNumber("0")}>0</button><button type="button" className="memory-keypad-clear" onClick={() => { setPin((value) => value.slice(0, -1)); setError(""); }} aria-label="ลบตัวเลขล่าสุด">←</button></div>
