@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { ENV } from "./env";
+import { readBinary } from "../githubStorage";
 
 export function registerStorageProxy(app: Express) {
   app.get(["/manus-storage/*", "/api/manus-storage/*"], async (req, res) => {
@@ -10,7 +11,13 @@ export function registerStorageProxy(app: Express) {
     }
 
     if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
-      res.status(500).send("Storage proxy not configured");
+      try {
+        const response = await readBinary(`media/${key}`);
+        res.set("Cache-Control", "public, max-age=31536000, immutable");
+        if (response.headers.get("content-type")) res.set("Content-Type", response.headers.get("content-type")!);
+        res.status(response.status);
+        res.send(Buffer.from(await response.arrayBuffer()));
+      } catch { res.status(404).send("Media not found"); }
       return;
     }
 

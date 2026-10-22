@@ -3,6 +3,7 @@
 // Downloads return /manus-storage/{key} paths served via 307 redirect.
 
 import { ENV } from "./_core/env";
+import { writeBinary } from "./githubStorage";
 
 function getForgeConfig() {
   const forgeUrl = ENV.forgeApiUrl;
@@ -32,8 +33,11 @@ export async function storagePrepareUpload(
   relKey: string,
   contentType = "application/octet-stream",
 ): Promise<{ key: string; uploadUrl: string; url: string }> {
-  const { forgeUrl, forgeKey } = getForgeConfig();
   const key = appendHashSuffix(normalizeKey(relKey));
+  if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
+    return { key, uploadUrl: `/api/media-upload?key=${encodeURIComponent(key)}`, url: `/manus-storage/${key}` };
+  }
+  const { forgeUrl, forgeKey } = getForgeConfig();
   const presignUrl = new URL("v1/storage/presign/put", forgeUrl + "/");
   presignUrl.searchParams.set("path", key);
   presignUrl.searchParams.set("contentType", contentType);
@@ -57,6 +61,10 @@ export async function storagePut(
   contentType = "application/octet-stream",
 ): Promise<{ key: string; url: string }> {
   const { key, uploadUrl, url } = await storagePrepareUpload(relKey, contentType);
+  if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
+    await writeBinary(`media/${key}`, typeof data === "string" ? Buffer.from(data) : Buffer.from(data), `media: add ${key}`);
+    return { key, url };
+  }
   const blob =
     typeof data === "string"
       ? new Blob([data], { type: contentType })

@@ -248,6 +248,20 @@ async function request(path, init = {}, ref) {
   }
   return await response.json();
 }
+async function writeBinary(path, bytes, message) {
+  return request(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: JSON.stringify({ message, content: Buffer.from(bytes).toString("base64") })
+  });
+}
+async function readBinary(path) {
+  const response = await fetch(`https://raw.githubusercontent.com/${REPOSITORY_OWNER}/${REPOSITORY_NAME}/main/${path.split("/").map(encodeURIComponent).join("/")}`, {
+    headers: { Authorization: `Bearer ${requireToken()}` }
+  });
+  if (!response.ok) throw new GitHubStorageError("\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E44\u0E1F\u0E25\u0E4C\u0E2A\u0E37\u0E48\u0E2D\u0E43\u0E19 GitHub", response.status);
+  return response;
+}
 async function readJson(path, makeDefault) {
   try {
     const file = await request(path);
@@ -341,8 +355,11 @@ function appendHashSuffix(relKey) {
   return `${relKey.slice(0, lastDot)}_${hash}${relKey.slice(lastDot)}`;
 }
 async function storagePrepareUpload(relKey, contentType = "application/octet-stream") {
-  const { forgeUrl, forgeKey } = getForgeConfig();
   const key = appendHashSuffix(normalizeKey(relKey));
+  if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
+    return { key, uploadUrl: `/api/media-upload?key=${encodeURIComponent(key)}`, url: `/manus-storage/${key}` };
+  }
+  const { forgeUrl, forgeKey } = getForgeConfig();
   const presignUrl = new URL("v1/storage/presign/put", forgeUrl + "/");
   presignUrl.searchParams.set("path", key);
   presignUrl.searchParams.set("contentType", contentType);
@@ -359,6 +376,10 @@ async function storagePrepareUpload(relKey, contentType = "application/octet-str
 }
 async function storagePut(relKey, data, contentType = "application/octet-stream") {
   const { key, uploadUrl, url } = await storagePrepareUpload(relKey, contentType);
+  if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
+    await writeBinary(`media/${key}`, typeof data === "string" ? Buffer.from(data) : Buffer.from(data), `media: add ${key}`);
+    return { key, url };
+  }
   const blob = typeof data === "string" ? new Blob([data], { type: contentType }) : new Blob([data], { type: contentType });
   const uploadResp = await fetch(uploadUrl, {
     method: "PUT",
@@ -1191,7 +1212,15 @@ function registerStorageProxy(app) {
       return;
     }
     if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
-      res.status(500).send("Storage proxy not configured");
+      try {
+        const response = await readBinary(`media/${key}`);
+        res.set("Cache-Control", "public, max-age=31536000, immutable");
+        if (response.headers.get("content-type")) res.set("Content-Type", response.headers.get("content-type"));
+        res.status(response.status);
+        res.send(Buffer.from(await response.arrayBuffer()));
+      } catch {
+        res.status(404).send("Media not found");
+      }
       return;
     }
     try {
@@ -1233,6 +1262,20 @@ function createApp() {
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
     next();
+  });
+  app.put("/api/media-upload", express.raw({ type: () => true, limit: "100mb" }), async (req, res) => {
+    const key = typeof req.query.key === "string" ? req.query.key : "";
+    if (!key || !/^anniversary\/[\w./-]+$/.test(key)) {
+      res.status(400).send("Invalid media key");
+      return;
+    }
+    try {
+      await writeBinary(`media/${key}`, req.body, `media: add ${key}`);
+      res.status(200).json({ ok: true });
+    } catch (error) {
+      console.error("[MediaUpload] failed", error);
+      res.status(500).send("Media upload failed");
+    }
   });
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));

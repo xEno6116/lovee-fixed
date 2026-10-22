@@ -57,6 +57,22 @@ async function request(path: string, init: RequestInit = {}, ref?: string) {
   return (await response.json()) as GitHubContentFile;
 }
 
+export async function writeBinary(path: string, bytes: Buffer | Uint8Array, message: string) {
+  return request(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: JSON.stringify({ message, content: Buffer.from(bytes).toString("base64") }),
+  });
+}
+
+export async function readBinary(path: string) {
+  const response = await fetch(`https://raw.githubusercontent.com/${REPOSITORY_OWNER}/${REPOSITORY_NAME}/main/${path.split("/").map(encodeURIComponent).join("/")}`, {
+    headers: { Authorization: `Bearer ${requireToken()}` },
+  });
+  if (!response.ok) throw new GitHubStorageError("ไม่พบไฟล์สื่อใน GitHub", response.status);
+  return response;
+}
+
 export async function readJson<T>(path: string, makeDefault: () => T): Promise<{ data: T; sha?: string }> {
   try {
     // Always read the current branch head. Caching a commit SHA across warm
