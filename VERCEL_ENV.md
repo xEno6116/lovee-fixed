@@ -13,6 +13,8 @@
 | `OWNER_NAME` | Backend | แนะนำ | ชื่อเจ้าของที่ใช้โดยส่วนระบบของ template |
 | `BUILT_IN_FORGE_API_URL` | Backend | จำเป็นเมื่อใช้อัปโหลด/แสดงสื่อ S3 | API สำหรับ presigned storage URLs |
 | `BUILT_IN_FORGE_API_KEY` | Backend | จำเป็นเมื่อใช้อัปโหลด/แสดงสื่อ S3 | Credential สำหรับ storage proxy และอัปโหลดสื่อ |
+| `RESEND_API_KEY` | Backend | จำเป็นสำหรับส่งจดหมาย | API key ของ Resend เก็บเป็น sensitive/encrypted เท่านั้น |
+| `MAIL_FROM_EMAIL` | Backend | จำเป็นสำหรับส่งจดหมาย | อีเมลผู้ส่งที่ยืนยันกับ Resend เช่น `onboarding@resend.dev` |
 
 > **ข้อควรระวัง:** ห้ามกำหนด `GITHUB_DATA_TOKEN` ด้วย prefix `VITE_` และห้ามใส่ token ใน source code เพราะตัวแปร `VITE_*` จะถูกฝังในไฟล์ JavaScript ที่ส่งไป browser.
 
