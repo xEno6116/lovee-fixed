@@ -8,10 +8,13 @@ import Home from "./pages/Home";
 import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
 
+const LEGACY_CONSOLE_PATH = "/loveoffice-console-5h9q2x7m4k8v1r6d3";
+
 function Router() {
   return <Switch>
     <Route path="/" component={Dashboard} />
     <Route path="/dashboard" component={Dashboard} />
+    <Route path={LEGACY_CONSOLE_PATH} component={Dashboard} />
     <Route path="/site/:slug/settings">{(params) => <Settings slug={params.slug} />}</Route>
     <Route path="/site/:slug">{(params) => <Home slug={params.slug} />}</Route>
     <Route path="/404" component={NotFound} />

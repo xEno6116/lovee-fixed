@@ -21,6 +21,10 @@
       "destination": "/index.html"
     },
     {
+      "source": "/loveoffice-console-5h9q2x7m4k8v1r6d3",
+      "destination": "/index.html"
+    },
+    {
       "source": "/site/:slug",
       "destination": "/index.html"
     },

@@ -1,0 +1,9 @@
+{
+  "routes": [
+    { "path": "/", "title": "LoveOffice dashboard" },
+    { "path": "/dashboard", "title": "LoveOffice dashboard" },
+    { "path": "/loveoffice-console-5h9q2x7m4k8v1r6d3", "title": "LoveOffice console" },
+    { "path": "/site/:slug", "title": "LoveOffice memory site" },
+    { "path": "/site/:slug/settings", "title": "LoveOffice site settings" }
+  ]
+}
