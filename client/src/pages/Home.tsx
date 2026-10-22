@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { ChevronLeft, ChevronRight, Pause, Play, Settings, Video } from "lucide-react";
-import { startLogin } from "@/const";
-import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 
 declare global {
@@ -28,14 +26,13 @@ function ClockBox({ value, label }: { value: number; label: string }) {
 }
 
 export default function Home({ slug }: { slug: string }) {
-  const { isAuthenticated, loading } = useAuth();
-  const siteQuery = trpc.site.private.get.useQuery({ slug }, { enabled: isAuthenticated });
-  const verifyPin = trpc.site.private.verifyPin.useMutation();
+  const siteQuery = trpc.site.public.get.useQuery({ slug });
+  const verifyPin = trpc.site.public.unlock.useMutation();
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [secretMessage, setSecretMessage] = useState("");
-  const [loginError, setLoginError] = useState("");
   const [unlocked, setUnlocked] = useState(false);
+  const [unlockedSite, setUnlockedSite] = useState<typeof siteQuery.data>();
   const [clock, setClock] = useState<TimeParts>({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   const [deletionClock, setDeletionClock] = useState<TimeParts>({ days: 0, hours: 0, minutes: 0, seconds: 0 });
   const captchaRef = useRef<HTMLDivElement>(null);
@@ -45,7 +42,7 @@ export default function Home({ slug }: { slug: string }) {
   const [playing, setPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  const site = siteQuery.data;
+  const site = unlockedSite ?? siteQuery.data;
   const videoSlots = useMemo(() => Array.from({ length: 4 }, (_, index) => site?.videos[index] ?? null), [site?.videos]);
 
   useEffect(() => {
@@ -89,8 +86,8 @@ export default function Home({ slug }: { slug: string }) {
       const recaptchaToken = window.grecaptcha?.getResponse(captchaWidget.current ?? undefined) ?? "";
       if (recaptchaEnabled && !recaptchaToken) { setError("กรุณาติ๊กยืนยันว่าไม่ใช่บอทก่อน"); setPin(""); return; }
       verifyPin.mutate({ slug, pin: next, ...(recaptchaEnabled ? { recaptchaToken } : {}) }, {
-      onSuccess: ({ valid, secretMessage: verifiedSecretMessage }) => {
-        if (valid) { setSecretMessage(verifiedSecretMessage ?? ""); setUnlocked(true); setPin(""); }
+      onSuccess: ({ valid, data }) => {
+        if (valid && data) { setUnlockedSite(data); setSecretMessage(data.settings.secretMessage ?? ""); setUnlocked(true); setPin(""); }
         else { setError("การยืนยันไม่ผ่าน หรือ PIN ไม่ถูกต้อง"); window.setTimeout(() => setPin(""), 450); window.grecaptcha?.reset(captchaWidget.current ?? undefined); }
       },
       onError: () => { setError("ตรวจสอบ PIN ไม่สำเร็จ"); setPin(""); window.grecaptcha?.reset(captchaWidget.current ?? undefined); },
@@ -104,8 +101,6 @@ export default function Home({ slug }: { slug: string }) {
     try { if (audio.paused) { await audio.play(); setPlaying(true); } else { audio.pause(); setPlaying(false); } } catch { setPlaying(false); }
   };
 
-  if (loading) return <div className="legacy-loading">กำลังตรวจสอบสิทธิ์การเข้าถึง…</div>;
-  if (!isAuthenticated) return <div className="legacy-loading"><div className="text-center"><p>เว็บไซต์นี้เป็นส่วนตัวสำหรับเจ้าของเท่านั้น</p><button className="legacy-save-btn mt-5" onClick={() => { const message = startLogin(); if (message) setLoginError(message); }}>เข้าสู่ระบบเจ้าของ</button>{loginError && <p className="legacy-lock-error mt-4">{loginError}</p>}</div></div>;
   if (siteQuery.isLoading) return <div className="legacy-loading">กำลังเปิดความทรงจำ…</div>;
   if (!site) return <div className="legacy-loading">ไม่สามารถเปิดเว็บไซต์นี้ได้</div>;
   if (site.locked) return <div className="legacy-lock-screen"><div className="legacy-admin-box text-center"><h2>เว็บไซต์ถูกล็อกแล้ว</h2><p className="legacy-admin-note">เว็บไซต์นี้หมดอายุและจะลบข้อมูลกับสื่อโดยอัตโนมัติเมื่อครบกำหนด</p><div className="legacy-clock justify-center my-6"><ClockBox value={deletionClock.days} label="วัน" /><ClockBox value={deletionClock.hours} label="ชั่วโมง" /><ClockBox value={deletionClock.minutes} label="นาที" /><ClockBox value={deletionClock.seconds} label="วินาที" /></div><p className="legacy-admin-note">กรุณาติดต่อเจ้าของเว็บไซต์เพื่อขอต่ออายุ</p></div></div>;

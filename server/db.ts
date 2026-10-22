@@ -232,6 +232,10 @@ export async function listMediaAssets(siteId: number, kind?: MediaKind) {
 export async function getPrivateSiteData(ownerId: number, slug: string) {
   const site = await getOwnedSiteBySlug(ownerId, slug);
   if (!site) return undefined;
+  return toPublicSiteData(site, true);
+}
+
+function toPublicSiteData(site: StoredSite, unlocked: boolean) {
   const assets = sortAssets(site.assets);
   const expiresAt = site.settings.expiresAt ?? null;
   const expiresAtMs = expiresAt ? new Date(expiresAt).getTime() : NaN;
@@ -241,15 +245,29 @@ export async function getPrivateSiteData(ownerId: number, slug: string) {
     settings: {
       id: site.settings.id,
       startDate: site.settings.startDate,
-      memoryMessage: site.settings.memoryMessage,
-      musicUrl: site.settings.musicUrl,
+      memoryMessage: unlocked ? site.settings.memoryMessage : "",
+      secretMessage: unlocked ? site.settings.secretMessage ?? "" : undefined,
+      musicUrl: unlocked ? site.settings.musicUrl : "",
       expiresAt,
     },
     locked,
     deletionAt: Number.isFinite(expiresAtMs) ? new Date(expiresAtMs + 3 * 86_400_000).toISOString() : null,
-    images: assets.filter((asset) => asset.kind === "image").map(toClientAsset),
-    videos: assets.filter((asset) => asset.kind === "video").map(toClientAsset),
+    images: unlocked ? assets.filter((asset) => asset.kind === "image").map(toClientAsset) : [],
+    videos: unlocked ? assets.filter((asset) => asset.kind === "video").map(toClientAsset) : [],
   };
+}
+
+export async function getPublicSitePreview(slug: string) {
+  const { data } = await readRepository();
+  const site = data.sites.find((item) => item.slug === slug);
+  return site ? toPublicSiteData(site, false) : undefined;
+}
+
+export async function unlockPublicSite(slug: string, pin: string) {
+  const { data } = await readRepository();
+  const site = data.sites.find((item) => item.slug === slug);
+  if (!site || site.settings.pinHash !== hashPin(pin)) return undefined;
+  return toPublicSiteData(site, true);
 }
 
 export async function getAdminSiteData(ownerId: number, slug: string) {

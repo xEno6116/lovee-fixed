@@ -7,18 +7,20 @@ import {
   deleteMediaAsset,
   deleteSiteForOwner,
   getAdminSiteData,
+  getPublicSitePreview,
   getOwnedSiteBySlug,
   getPrivateSiteData,
   listMediaAssets,
   listSitesForOwner,
   prepareMediaUpload,
   setMusicUrl,
+  unlockPublicSite,
   updateMediaOrder,
   updateSiteSettings,
   verifySitePin,
 } from "../db";
 import { decodeDataUrl, isAllowedMedia, isValidPin } from "../siteUtils";
-import { protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { ENV } from "../_core/env";
 
 const slugSchema = z.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
@@ -64,6 +66,25 @@ async function verifyRecaptcha(token?: string) {
 }
 
 export const siteRouter = router({
+  public: router({
+    get: publicProcedure
+      .input(siteInput)
+      .query(async ({ input }) => {
+        const data = await getPublicSitePreview(input.slug);
+        if (!data) throw new TRPCError({ code: "NOT_FOUND", message: "ไม่พบเว็บไซต์นี้" });
+        return data;
+      }),
+    unlock: publicProcedure
+      .input(z.object({ slug: slugSchema, pin: z.string(), recaptchaToken: z.string().min(10).optional() }))
+      .mutation(async ({ ctx, input }) => {
+        if (!isValidPin(input.pin)) return { valid: false as const };
+        const address = ctx.req?.ip || ctx.req?.headers["x-forwarded-for"]?.toString().split(",")[0] || "unknown";
+        if (!allowPinAttempt(`${address}:${input.slug}`)) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "ลอง PIN มากเกินไป กรุณารอ 1 นาที" });
+        if (!(await verifyRecaptcha(input.recaptchaToken))) return { valid: false as const, bot: true as const };
+        const data = await unlockPublicSite(input.slug, input.pin);
+        return data ? { valid: true as const, data } : { valid: false as const };
+      }),
+  }),
   dashboard: router({
     list: protectedProcedure.query(({ ctx }) => listSitesForOwner(ctx.user.id)),
     create: protectedProcedure

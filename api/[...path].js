@@ -506,6 +506,9 @@ async function listMediaAssets(siteId, kind) {
 async function getPrivateSiteData(ownerId, slug) {
   const site = await getOwnedSiteBySlug(ownerId, slug);
   if (!site) return void 0;
+  return toPublicSiteData(site, true);
+}
+function toPublicSiteData(site, unlocked) {
   const assets = sortAssets(site.assets);
   const expiresAt = site.settings.expiresAt ?? null;
   const expiresAtMs = expiresAt ? new Date(expiresAt).getTime() : NaN;
@@ -515,15 +518,27 @@ async function getPrivateSiteData(ownerId, slug) {
     settings: {
       id: site.settings.id,
       startDate: site.settings.startDate,
-      memoryMessage: site.settings.memoryMessage,
-      musicUrl: site.settings.musicUrl,
+      memoryMessage: unlocked ? site.settings.memoryMessage : "",
+      secretMessage: unlocked ? site.settings.secretMessage ?? "" : void 0,
+      musicUrl: unlocked ? site.settings.musicUrl : "",
       expiresAt
     },
     locked,
     deletionAt: Number.isFinite(expiresAtMs) ? new Date(expiresAtMs + 3 * 864e5).toISOString() : null,
-    images: assets.filter((asset) => asset.kind === "image").map(toClientAsset),
-    videos: assets.filter((asset) => asset.kind === "video").map(toClientAsset)
+    images: unlocked ? assets.filter((asset) => asset.kind === "image").map(toClientAsset) : [],
+    videos: unlocked ? assets.filter((asset) => asset.kind === "video").map(toClientAsset) : []
   };
+}
+async function getPublicSitePreview(slug) {
+  const { data } = await readRepository();
+  const site = data.sites.find((item) => item.slug === slug);
+  return site ? toPublicSiteData(site, false) : void 0;
+}
+async function unlockPublicSite(slug, pin) {
+  const { data } = await readRepository();
+  const site = data.sites.find((item) => item.slug === slug);
+  if (!site || site.settings.pinHash !== hashPin(pin)) return void 0;
+  return toPublicSiteData(site, true);
 }
 async function getAdminSiteData(ownerId, slug) {
   const site = await getOwnedSiteBySlug(ownerId, slug);
@@ -689,6 +704,21 @@ async function verifyRecaptcha(token) {
   return result.success === true;
 }
 var siteRouter = router({
+  public: router({
+    get: publicProcedure.input(siteInput).query(async ({ input }) => {
+      const data = await getPublicSitePreview(input.slug);
+      if (!data) throw new TRPCError3({ code: "NOT_FOUND", message: "\u0E44\u0E21\u0E48\u0E1E\u0E1A\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E19\u0E35\u0E49" });
+      return data;
+    }),
+    unlock: publicProcedure.input(z2.object({ slug: slugSchema, pin: z2.string(), recaptchaToken: z2.string().min(10).optional() })).mutation(async ({ ctx, input }) => {
+      if (!isValidPin(input.pin)) return { valid: false };
+      const address = ctx.req?.ip || ctx.req?.headers["x-forwarded-for"]?.toString().split(",")[0] || "unknown";
+      if (!allowPinAttempt(`${address}:${input.slug}`)) throw new TRPCError3({ code: "TOO_MANY_REQUESTS", message: "\u0E25\u0E2D\u0E07 PIN \u0E21\u0E32\u0E01\u0E40\u0E01\u0E34\u0E19\u0E44\u0E1B \u0E01\u0E23\u0E38\u0E13\u0E32\u0E23\u0E2D 1 \u0E19\u0E32\u0E17\u0E35" });
+      if (!await verifyRecaptcha(input.recaptchaToken)) return { valid: false, bot: true };
+      const data = await unlockPublicSite(input.slug, input.pin);
+      return data ? { valid: true, data } : { valid: false };
+    })
+  }),
   dashboard: router({
     list: protectedProcedure.query(({ ctx }) => listSitesForOwner(ctx.user.id)),
     create: protectedProcedure.input(z2.object({ title: z2.string().trim().min(1).max(160), slug: slugSchema })).mutation(async ({ ctx, input }) => {
