@@ -10,6 +10,7 @@ import {
   getPublicSitePreview,
   getOwnedSiteBySlug,
   getPrivateSiteData,
+  getSiteForLetter,
   listMediaAssets,
   listSitesForOwner,
   prepareMediaUpload,
@@ -22,6 +23,7 @@ import {
 import { decodeDataUrl, isAllowedMedia, isValidPin } from "../siteUtils";
 import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { ENV } from "../_core/env";
+import { sendMemoryLetter } from "../email";
 
 const slugSchema = z.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
 const siteInput = z.object({ slug: slugSchema });
@@ -37,6 +39,7 @@ const settingsInput = z.object({
   backgroundStyle: z.enum(["soft", "sunset", "night", "paper"]).optional(),
   themeMode: z.enum(["light", "night"]).optional(),
   fontFamily: z.enum(["gaegu", "serif", "sans"]).optional(),
+  letterRecipientEmail: z.string().email("กรุณาใส่อีเมลผู้รับให้ถูกต้อง").or(z.literal("")).optional(),
 });
 
 async function requireOwnedSite(ownerId: number, slug: string) {
@@ -45,7 +48,7 @@ async function requireOwnedSite(ownerId: number, slug: string) {
   return site;
 }
 
-const pinAttempts = new Map<string, { count: number; resetAt: number }>();
+  const pinAttempts = new Map<string, { count: number; resetAt: number }>();
 
 function allowPinAttempt(key: string) {
   const now = Date.now();
@@ -78,7 +81,7 @@ export const siteRouter = router({
         if (!data) throw new TRPCError({ code: "NOT_FOUND", message: "ไม่พบเว็บไซต์นี้" });
         return data;
       }),
-    unlock: publicProcedure
+      unlock: publicProcedure
       .input(z.object({ slug: slugSchema, pin: z.string(), recaptchaToken: z.string().min(10).optional() }))
       .mutation(async ({ ctx, input }) => {
         if (!isValidPin(input.pin)) return { valid: false as const };
@@ -87,6 +90,19 @@ export const siteRouter = router({
         if (!(await verifyRecaptcha(input.recaptchaToken))) return { valid: false as const, bot: true as const };
         const data = await unlockPublicSite(input.slug, input.pin);
         return data ? { valid: true as const, data } : { valid: false as const };
+      }),
+    sendLetter: publicProcedure
+      .input(z.object({ slug: slugSchema, senderName: z.string().trim().min(1).max(80), senderEmail: z.string().email().optional().or(z.literal("")), message: z.string().trim().min(3).max(5000) }))
+      .mutation(async ({ ctx, input }) => {
+        const address = ctx.req?.ip || ctx.req?.headers["x-forwarded-for"]?.toString().split(",")[0] || "unknown";
+        if (!allowPinAttempt(`letter:${address}:${input.slug}`)) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "ส่งจดหมายถี่เกินไป กรุณารอสักครู่" });
+        const site = await getSiteForLetter(input.slug);
+        if (!site) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "เจ้าของเว็บไซต์ยังไม่ได้ตั้งค่าอีเมลผู้รับ" });
+        try {
+          return await sendMemoryLetter({ ...input, siteTitle: site.title, to: site.recipientEmail });
+        } catch (error) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: error instanceof Error ? error.message : "ส่งจดหมายไม่สำเร็จ" });
+        }
       }),
   }),
   dashboard: router({

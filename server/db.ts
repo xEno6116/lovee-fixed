@@ -22,6 +22,7 @@ type StoredSettings = {
   backgroundStyle?: "soft" | "sunset" | "night" | "paper";
   themeMode?: "light" | "night";
   fontFamily?: "gaegu" | "serif" | "sans";
+  letterRecipientEmail?: string;
 };
 
 type StoredAsset = {
@@ -292,12 +293,19 @@ export async function getAdminSiteData(ownerId: number, slug: string) {
   };
 }
 
+export async function getSiteForLetter(slug: string) {
+  const { data } = await readRepository();
+  const site = data.sites.find((item) => item.slug === slug);
+  if (!site || !site.settings.letterRecipientEmail) return undefined;
+  return { title: site.title, recipientEmail: site.settings.letterRecipientEmail };
+}
+
 export async function verifySitePin(siteId: number, pin: string) {
   const settings = await getSiteSettings(siteId);
   return Boolean(settings && settings.pinHash === hashPin(pin));
 }
 
-export async function updateSiteSettings(siteId: number, input: { memoryMessage: string; secretMessage?: string; startDate: string; pin?: string; musicUrl: string; expiresAt?: string | null; themeColor?: string; backgroundStyle?: StoredSettings["backgroundStyle"]; themeMode?: StoredSettings["themeMode"]; fontFamily?: StoredSettings["fontFamily"] }) {
+export async function updateSiteSettings(siteId: number, input: { memoryMessage: string; secretMessage?: string; startDate: string; pin?: string; musicUrl: string; expiresAt?: string | null; themeColor?: string; backgroundStyle?: StoredSettings["backgroundStyle"]; themeMode?: StoredSettings["themeMode"]; fontFamily?: StoredSettings["fontFamily"]; letterRecipientEmail?: string }) {
   return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update settings ${siteId}`, (repository) => {
     const site = getSite(repository, siteId);
     if (!site) throw new Error("ไม่พบเว็บไซต์สำหรับบันทึกการตั้งค่า");
@@ -312,6 +320,7 @@ export async function updateSiteSettings(siteId: number, input: { memoryMessage:
       ...(input.backgroundStyle ? { backgroundStyle: input.backgroundStyle } : {}),
       ...(input.themeMode ? { themeMode: input.themeMode } : {}),
       ...(input.fontFamily ? { fontFamily: input.fontFamily } : {}),
+      ...(input.letterRecipientEmail !== undefined ? { letterRecipientEmail: input.letterRecipientEmail.trim() } : {}),
       ...(input.expiresAt !== undefined ? { expiresAt: input.expiresAt } : {}),
       ...(input.pin ? { pinHash: hashPin(input.pin) } : {}),
       updatedAt: now,

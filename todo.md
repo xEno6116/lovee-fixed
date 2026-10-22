@@ -78,3 +78,7 @@
 - [x] ปรับหน้า Settings เป็น cosmic control room พร้อมระบบ glass panel, upload/delete feedback และ layout ที่ไม่ล้นบนมือถือ โดยคง API contract เดิม
 - [x] ปรับหน้า public memory เป็นธีมกาแล็กซี เพิ่ม starfield/orbit/glow, PIN unlock feedback, media controls และ reduced-motion fallback โดยคงข้อมูลและฟีเจอร์เดิม
 - [ ] ตรวจ TypeScript, build, test และตรวจ route manifest หลังการปรับ UI พร้อม push ขึ้น branch master ให้ Vercel deploy
+- [ ] เพิ่มการอัปโหลดรูปหลายไฟล์พร้อมกันในหน้า Settings
+- [ ] เพิ่มฟอร์มเขียนจดหมายและส่งอีเมลจากหน้า public
+- [ ] ตั้งค่า RESEND_API_KEY และ MAIL_FROM_EMAIL ใน environment ของ production
+- [ ] ตรวจ build/test และ deploy เวอร์ชันที่เพิ่มจดหมายและแกลเลอรี

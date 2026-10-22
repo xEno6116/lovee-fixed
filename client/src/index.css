@@ -238,3 +238,27 @@ a { color: inherit; text-decoration: none; }
 .memory-gateway-theme .memory-verify-button:hover:not(:disabled) { background: #fff; box-shadow: 0 0 32px rgba(255, 255, 255, .16); color: #000; transform: translateY(-1px); }
 .memory-gateway-theme .memory-unlock-error { color: #d1d5db; font-size: .7rem; }
 @media (max-width: 520px) { .memory-gateway-theme .memory-unlock-card { border-radius: 14px; padding: 28px 18px 25px; }.memory-gateway-theme .memory-keypad button { height: 50px; } }
+
+/* Love letter + multi-photo polish */
+.memory-letter-panel { grid-column: 1 / -1; border: 1px solid rgba(255,255,255,.15); border-radius: 24px; padding: clamp(20px, 4vw, 34px); background: linear-gradient(135deg, rgba(255,255,255,.1), rgba(139,92,246,.12)); box-shadow: 0 24px 60px rgba(0,0,0,.22), inset 0 1px rgba(255,255,255,.1); backdrop-filter: blur(18px); }
+.memory-letter-panel .memory-section-heading { margin-bottom: 8px; }
+.memory-letter-panel .memory-section-heading > span { border: 1px solid rgba(103,232,249,.25); border-radius: 999px; padding: 7px 10px; color: #a5f3fc; font-size: .7rem; }
+.memory-letter-intro { margin: 0 0 18px; color: #bdc7e8; font-size: .92rem; }
+.memory-letter-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.memory-letter-form input, .memory-letter-form textarea { width: 100%; border: 1px solid rgba(211,224,255,.18); border-radius: 13px; outline: 0; padding: 13px 15px; background: rgba(6,8,30,.34); color: #f8fbff; transition: border-color .2s ease, box-shadow .2s ease; }
+.memory-letter-form input:focus, .memory-letter-form textarea:focus { border-color: #67e8f9; box-shadow: 0 0 0 4px rgba(103,232,249,.1); }
+.memory-letter-form input::placeholder, .memory-letter-form textarea::placeholder { color: #7e8bb7; }
+.memory-letter-form textarea { grid-column: 1 / -1; min-height: 130px; resize: vertical; }
+.memory-letter-form button { justify-self: start; min-width: 150px; }
+.memory-letter-status { margin: 14px 0 0; color: #a7f3d0; font-size: .86rem; }
+.memory-gallery-panel { overflow: hidden; }
+.memory-photo-slide img { display: block; width: 100%; height: min(52vw, 420px); object-fit: cover; }
+@media (max-width: 640px) {
+  .memory-letter-form { grid-template-columns: 1fr; }
+  .memory-letter-form textarea { grid-column: auto; }
+  .memory-letter-form button { width: 100%; }
+  .memory-photo-slide img { height: 62vw; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .memory-letter-form input, .memory-letter-form textarea { transition: none; }
+}

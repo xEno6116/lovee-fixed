@@ -60,7 +60,9 @@ var ENV = {
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   cronSecret: process.env.CRON_SECRET ?? "",
-  recaptchaSecretKey: process.env.RECAPTCHA_SECRET_KEY ?? ""
+  recaptchaSecretKey: process.env.RECAPTCHA_SECRET_KEY ?? "",
+  resendApiKey: process.env.RESEND_API_KEY ?? "",
+  mailFromEmail: process.env.MAIL_FROM_EMAIL ?? ""
 };
 
 // server/_core/notification.ts
@@ -578,6 +580,12 @@ async function getAdminSiteData(ownerId, slug) {
     assets: sortAssets(site.assets).map(toClientAsset)
   };
 }
+async function getSiteForLetter(slug) {
+  const { data } = await readRepository();
+  const site = data.sites.find((item) => item.slug === slug);
+  if (!site || !site.settings.letterRecipientEmail) return void 0;
+  return { title: site.title, recipientEmail: site.settings.letterRecipientEmail };
+}
 async function verifySitePin(siteId, pin) {
   const settings = await getSiteSettings(siteId);
   return Boolean(settings && settings.pinHash === hashPin(pin));
@@ -597,6 +605,7 @@ async function updateSiteSettings(siteId, input) {
       ...input.backgroundStyle ? { backgroundStyle: input.backgroundStyle } : {},
       ...input.themeMode ? { themeMode: input.themeMode } : {},
       ...input.fontFamily ? { fontFamily: input.fontFamily } : {},
+      ...input.letterRecipientEmail !== void 0 ? { letterRecipientEmail: input.letterRecipientEmail.trim() } : {},
       ...input.expiresAt !== void 0 ? { expiresAt: input.expiresAt } : {},
       ...input.pin ? { pinHash: hashPin(input.pin) } : {},
       updatedAt: now
@@ -698,6 +707,41 @@ async function updateMediaOrder(siteId, id, sortOrder) {
   });
 }
 
+// server/email.ts
+async function sendMemoryLetter(input) {
+  if (!ENV.resendApiKey || !ENV.mailFromEmail) {
+    throw new Error("\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32\u0E23\u0E30\u0E1A\u0E1A\u0E2A\u0E48\u0E07\u0E2D\u0E35\u0E40\u0E21\u0E25");
+  }
+  const replyTo = input.senderEmail?.trim();
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${ENV.resendApiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from: ENV.mailFromEmail,
+      to: [input.to],
+      ...replyTo ? { reply_to: replyTo } : {},
+      subject: `\u0E08\u0E14\u0E2B\u0E21\u0E32\u0E22\u0E43\u0E2B\u0E21\u0E48\u0E08\u0E32\u0E01\u0E04\u0E27\u0E32\u0E21\u0E17\u0E23\u0E07\u0E08\u0E33 \u2014 ${input.siteTitle}`,
+      text: `\u0E0A\u0E37\u0E48\u0E2D\u0E1C\u0E39\u0E49\u0E2A\u0E48\u0E07: ${input.senderName}
+\u0E2D\u0E35\u0E40\u0E21\u0E25: ${replyTo || "\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E23\u0E30\u0E1A\u0E38"}
+
+${input.message}`,
+      html: `<div style="font-family:Arial,sans-serif;line-height:1.7;color:#24213a"><h2>\u0E08\u0E14\u0E2B\u0E21\u0E32\u0E22\u0E43\u0E2B\u0E21\u0E48\u0E08\u0E32\u0E01 ${escapeHtml(input.senderName)}</h2><p style="white-space:pre-wrap">${escapeHtml(input.message)}</p>${replyTo ? `<p>\u0E15\u0E2D\u0E1A\u0E01\u0E25\u0E31\u0E1A\u0E44\u0E14\u0E49\u0E17\u0E35\u0E48: ${escapeHtml(replyTo)}</p>` : ""}<hr><small>\u0E2A\u0E48\u0E07\u0E08\u0E32\u0E01\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C ${escapeHtml(input.siteTitle)}</small></div>`
+    })
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    console.error("[Email] Resend failed", response.status, detail);
+    throw new Error("\u0E2A\u0E48\u0E07\u0E08\u0E14\u0E2B\u0E21\u0E32\u0E22\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08");
+  }
+  return { sent: true };
+}
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character] ?? character);
+}
+
 // server/routers/site.ts
 var slugSchema = z2.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "\u0E43\u0E0A\u0E49\u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23\u0E2D\u0E31\u0E07\u0E01\u0E24\u0E29 \u0E15\u0E31\u0E27\u0E40\u0E25\u0E02 \u0E41\u0E25\u0E30\u0E02\u0E35\u0E14\u0E01\u0E25\u0E32\u0E07\u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19");
 var siteInput = z2.object({ slug: slugSchema });
@@ -712,7 +756,8 @@ var settingsInput = z2.object({
   themeColor: z2.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   backgroundStyle: z2.enum(["soft", "sunset", "night", "paper"]).optional(),
   themeMode: z2.enum(["light", "night"]).optional(),
-  fontFamily: z2.enum(["gaegu", "serif", "sans"]).optional()
+  fontFamily: z2.enum(["gaegu", "serif", "sans"]).optional(),
+  letterRecipientEmail: z2.string().email("\u0E01\u0E23\u0E38\u0E13\u0E32\u0E43\u0E2A\u0E48\u0E2D\u0E35\u0E40\u0E21\u0E25\u0E1C\u0E39\u0E49\u0E23\u0E31\u0E1A\u0E43\u0E2B\u0E49\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07").or(z2.literal("")).optional()
 });
 async function requireOwnedSite(ownerId, slug) {
   const site = await getOwnedSiteBySlug(ownerId, slug);
@@ -754,6 +799,17 @@ var siteRouter = router({
       if (!await verifyRecaptcha(input.recaptchaToken)) return { valid: false, bot: true };
       const data = await unlockPublicSite(input.slug, input.pin);
       return data ? { valid: true, data } : { valid: false };
+    }),
+    sendLetter: publicProcedure.input(z2.object({ slug: slugSchema, senderName: z2.string().trim().min(1).max(80), senderEmail: z2.string().email().optional().or(z2.literal("")), message: z2.string().trim().min(3).max(5e3) })).mutation(async ({ ctx, input }) => {
+      const address = ctx.req?.ip || ctx.req?.headers["x-forwarded-for"]?.toString().split(",")[0] || "unknown";
+      if (!allowPinAttempt(`letter:${address}:${input.slug}`)) throw new TRPCError3({ code: "TOO_MANY_REQUESTS", message: "\u0E2A\u0E48\u0E07\u0E08\u0E14\u0E2B\u0E21\u0E32\u0E22\u0E16\u0E35\u0E48\u0E40\u0E01\u0E34\u0E19\u0E44\u0E1B \u0E01\u0E23\u0E38\u0E13\u0E32\u0E23\u0E2D\u0E2A\u0E31\u0E01\u0E04\u0E23\u0E39\u0E48" });
+      const site = await getSiteForLetter(input.slug);
+      if (!site) throw new TRPCError3({ code: "PRECONDITION_FAILED", message: "\u0E40\u0E08\u0E49\u0E32\u0E02\u0E2D\u0E07\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E22\u0E31\u0E07\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E15\u0E31\u0E49\u0E07\u0E04\u0E48\u0E32\u0E2D\u0E35\u0E40\u0E21\u0E25\u0E1C\u0E39\u0E49\u0E23\u0E31\u0E1A" });
+      try {
+        return await sendMemoryLetter({ ...input, siteTitle: site.title, to: site.recipientEmail });
+      } catch (error) {
+        throw new TRPCError3({ code: "INTERNAL_SERVER_ERROR", message: error instanceof Error ? error.message : "\u0E2A\u0E48\u0E07\u0E08\u0E14\u0E2B\u0E21\u0E32\u0E22\u0E44\u0E21\u0E48\u0E2A\u0E33\u0E40\u0E23\u0E47\u0E08" });
+      }
     })
   }),
   dashboard: router({

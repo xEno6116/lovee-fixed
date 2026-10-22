@@ -11,4 +11,6 @@ export const ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   cronSecret: process.env.CRON_SECRET ?? "",
   recaptchaSecretKey: process.env.RECAPTCHA_SECRET_KEY ?? "",
+  resendApiKey: process.env.RESEND_API_KEY ?? "",
+  mailFromEmail: process.env.MAIL_FROM_EMAIL ?? "",
 };

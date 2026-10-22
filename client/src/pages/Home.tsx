@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { Link } from "wouter";
-import { ChevronLeft, ChevronRight, Heart, LockKeyhole, Orbit, Pause, Play, Settings, Sparkles, Video } from "lucide-react";
+import { ChevronLeft, ChevronRight, Heart, LockKeyhole, Mail, Orbit, Pause, Play, Settings, Sparkles, Video } from "lucide-react";
 import CosmicBackdrop from "@/components/CosmicBackdrop";
 import { trpc } from "@/lib/trpc";
 
@@ -43,7 +43,15 @@ export default function Home({ slug }: { slug: string }) {
   const [videoIndex, setVideoIndex] = useState(0);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [letterName, setLetterName] = useState("");
+  const [letterEmail, setLetterEmail] = useState("");
+  const [letterMessage, setLetterMessage] = useState("");
+  const [letterStatus, setLetterStatus] = useState("");
   const audioRef = useRef<HTMLAudioElement>(null);
+  const sendLetterMutation = trpc.site.public.sendLetter.useMutation({
+    onSuccess: () => { setLetterStatus("ส่งจดหมายเรียบร้อยแล้ว"); setLetterName(""); setLetterEmail(""); setLetterMessage(""); },
+    onError: (error) => setLetterStatus(error.message),
+  });
 
   const site = unlockedSite ?? siteQuery.data;
   const videoSlots = useMemo(() => Array.from({ length: 4 }, (_, index) => site?.videos[index] ?? null), [site?.videos]);
@@ -150,6 +158,11 @@ export default function Home({ slug }: { slug: string }) {
   const themeFont = { gaegu: "'Gaegu', 'Noto Sans Thai', sans-serif", serif: "Georgia, 'Noto Serif Thai', serif", sans: "'DM Sans', 'Noto Sans Thai', sans-serif" }[site.settings.fontFamily ?? "sans"];
   const siteStyle = { "--site-accent": site.settings.themeColor ?? "#8b5cf6", fontFamily: themeFont } as CSSProperties;
   const movePhoto = (direction: number) => { if (photos.length) setPhotoIndex((index) => (index + direction + photos.length) % photos.length); };
+  const sendLetter = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLetterStatus("");
+    sendLetterMutation.mutate({ slug, senderName: letterName, senderEmail: letterEmail, message: letterMessage });
+  };
 
   return <div className={`memory-site memory-tone-${backgroundStyle} ${site.settings.themeMode === "light" ? "memory-light" : ""}`} style={siteStyle}>
     <CosmicBackdrop />
@@ -170,6 +183,7 @@ export default function Home({ slug }: { slug: string }) {
         <section className="memory-message-panel"><span className="cosmic-section-kicker">A SMALL UNIVERSE</span><Heart size={22} fill="currentColor" /><p>{site.settings.memoryMessage}</p><i className="memory-message-star">✦</i></section>
         {secretMessage && <section className="memory-secret-panel"><LockKeyhole size={17} /><div><span>UNLOCKED NOTE</span><p>{secretMessage}</p></div></section>}
         <section className="memory-panel memory-gallery-panel"><div className="memory-section-heading"><div><span className="cosmic-section-kicker">PHOTO DUST</span><h2><Sparkles size={19} /> รูปที่คบกัน</h2></div>{photos.length ? <span>{photoIndex + 1} / {photos.length}</span> : null}</div><div className="memory-photo-shell"><button type="button" className="memory-arrow memory-photo-prev" onClick={() => movePhoto(-1)} disabled={!photos.length} aria-label="รูปก่อนหน้า"><ChevronLeft size={20} /></button><div className="memory-photo-viewport"><div className="memory-photo-track" style={{ transform: `translateX(-${photoIndex * 100}%)` }}>{photos.length ? photos.map((asset) => <div className="memory-photo-slide" key={asset.id}><img src={asset.url} alt={asset.originalName} loading="lazy" /></div>) : <div className="memory-photo-slide"><div className="memory-empty-photo"><Sparkles size={30} />ยังไม่มีรูปภาพ</div></div>}</div></div><button type="button" className="memory-arrow memory-photo-next" onClick={() => movePhoto(1)} disabled={!photos.length} aria-label="รูปถัดไป"><ChevronRight size={20} /></button></div></section>
+        <section className="memory-letter-panel"><div className="memory-section-heading"><div><span className="cosmic-section-kicker">A LETTER FOR YOU</span><h2><Mail size={20} /> เขียนจดหมายถึงเรา</h2></div><span>ส่งเข้าเมล</span></div><p className="memory-letter-intro">ฝากข้อความเล็ก ๆ ไว้ในกล่องจดหมายของความทรงจำนี้</p><form className="memory-letter-form" onSubmit={sendLetter}><input required maxLength={80} value={letterName} onChange={(event) => setLetterName(event.target.value)} placeholder="ชื่อของคุณ" /><input type="email" value={letterEmail} onChange={(event) => setLetterEmail(event.target.value)} placeholder="อีเมลสำหรับตอบกลับ (ไม่บังคับ)" /><textarea required minLength={3} maxLength={5000} value={letterMessage} onChange={(event) => setLetterMessage(event.target.value)} placeholder="เขียนอะไรบางอย่างจากหัวใจ…" /><button className="cosmic-primary-button" type="submit" disabled={sendLetterMutation.isPending}>{sendLetterMutation.isPending ? "กำลังส่ง…" : "ส่งจดหมาย"}</button></form>{letterStatus && <p className="memory-letter-status" role="status">{letterStatus}</p>}</section>
       </div>
       <footer className="memory-footer"><span /><p>อยู่ด้วยกันตลอดไปนะ</p><span /></footer>
     </main>}
