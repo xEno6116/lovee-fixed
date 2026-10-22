@@ -59,10 +59,10 @@ export function useAuth(options?: UseAuthOptions) {
       user: meQuery.data ?? null,
       loading: meQuery.isLoading || logoutMutation.isPending,
       error: meQuery.error ?? logoutMutation.error ?? null,
-      // Password protection was explicitly disabled for this site. The API
-      // context resolves the configured owner account for unauthenticated
-      // requests, so the dashboard must not render a login gate here.
-      isAuthenticated: true,
+      // The dashboard must reflect the server session. Rendering it as
+      // authenticated while auth.me is null makes every protected mutation
+      // fail later with a confusing "Please login" error.
+      isAuthenticated: Boolean(meQuery.data),
     };
   }, [
     meQuery.data,
