@@ -201,3 +201,25 @@
 .legacy-status { margin: 0; border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.35; }.legacy-status-success { background: #ecfdf5; color: #047857; }.legacy-status-error { background: #fff1f2; color: #be123c; }.legacy-status-info { background: #eff6ff; color: #1d4ed8; }
 .legacy-media-list { display: grid; gap: 6px; margin-top: 8px; }
 .legacy-message-section { margin-bottom: 2.25rem; }.legacy-glass-card { max-width: 22rem; padding: 1.25rem 1.5rem; border-radius: 28px; }.legacy-glass-card p { overflow-wrap: anywhere; font-size: 1.2rem; line-height: 1.55; }@media (max-width: 520px) { .legacy-section { padding: 0 1rem; }.legacy-message-section { margin-bottom: 2rem; }.legacy-glass-card { max-width: min(100%, 20rem); padding: 1rem 1.25rem; border-radius: 24px; }.legacy-glass-card p { font-size: 1.1rem; line-height: 1.5; } }
+
+/* Admin redesign: keep the familiar romantic palette, but make the console a real responsive workspace. */
+.legacy-admin-screen { align-items: flex-start; padding: clamp(16px, 4vw, 48px); background: linear-gradient(135deg, rgba(76, 29, 149, .62), rgba(190, 24, 93, .58)), #fff1f2; backdrop-filter: blur(8px); }
+.legacy-admin-box { max-width: 980px; max-height: none; min-height: min(720px, 92vh); margin: auto; border: 1px solid rgba(255,255,255,.8); border-radius: 30px; padding: clamp(20px, 4vw, 38px); box-shadow: 0 28px 80px rgba(80,20,40,.28); background: rgba(255,255,255,.97); }
+.legacy-admin-box > .flex { padding-bottom: 18px; border-bottom: 1px solid #fce7f3; }
+.legacy-admin-box h3 { margin: 0; text-align: left; font-size: clamp(1.7rem, 3vw, 2.35rem); letter-spacing: -.02em; }
+.legacy-admin-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.legacy-admin-stack > :first-child, .legacy-admin-stack > :nth-child(2), .legacy-admin-stack > :nth-child(3) { min-height: 150px; padding: 16px; border: 1px solid #fce7f3; border-radius: 20px; background: linear-gradient(180deg, #fff, #fff7fa); }
+.legacy-admin-stack > :first-child label, .legacy-admin-stack > :nth-child(2) label, .legacy-admin-stack > :nth-child(3) label { margin-left: 0; color: #be185d; font-size: 12px; letter-spacing: .04em; text-transform: none; }
+.legacy-basic-card { grid-column: 1 / -1; padding: 20px; border-color: #fbcfe8; background: linear-gradient(135deg, #fff1f2, #eff6ff); }
+.legacy-basic-card h4 { font-size: 15px; text-transform: none; }
+.legacy-admin-actions, .legacy-admin-stack > .legacy-close-btn, .legacy-admin-stack > .legacy-guide { grid-column: 1 / -1; }
+.legacy-admin-actions { align-items: center; padding-top: 2px; }
+.legacy-close-btn { text-align: center; transition: transform .2s ease, background .2s ease; }
+.legacy-close-btn:hover { transform: translateY(-1px); background: #fce7f3; color: #be185d; }
+.legacy-save-btn { min-height: 46px; background: linear-gradient(135deg, #ec4899, #be185d); }
+@media (max-width: 700px) {
+  .legacy-admin-screen { padding: 10px; }
+  .legacy-admin-box { min-height: 0; max-height: 96vh; border-radius: 22px; padding: 18px; }
+  .legacy-admin-stack { grid-template-columns: 1fr; gap: 14px; }
+  .legacy-admin-stack > :first-child, .legacy-admin-stack > :nth-child(2), .legacy-admin-stack > :nth-child(3), .legacy-basic-card, .legacy-admin-actions, .legacy-admin-stack > .legacy-close-btn, .legacy-admin-stack > .legacy-guide { grid-column: auto; }
+}
