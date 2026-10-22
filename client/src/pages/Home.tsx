@@ -12,6 +12,7 @@ declare global {
 type TimeParts = { days: number; hours: number; minutes: number; seconds: number };
 
 function elapsedFrom(startDate: string): TimeParts {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) return { days: 0, hours: 0, minutes: 0, seconds: 0 };
   const difference = Math.max(0, Date.now() - new Date(`${startDate}T00:00:00`).getTime());
   return { days: Math.floor(difference / 86_400_000), hours: Math.floor((difference / 3_600_000) % 24), minutes: Math.floor((difference / 60_000) % 60), seconds: Math.floor((difference / 1_000) % 60) };
 }

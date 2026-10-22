@@ -29,7 +29,7 @@ const settingsInput = z.object({
   slug: slugSchema,
   memoryMessage: z.string().trim().min(1).max(5000),
   secretMessage: z.string().max(5000).optional(),
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  startDate: z.string().regex(/^$|^\d{4}-\d{2}-\d{2}$/),
   pin: z.string().regex(/^\d{4}$/).optional(),
   musicUrl: z.string().url().or(z.literal("")),
   expiresAt: z.string().datetime({ offset: true }).nullable().optional(),

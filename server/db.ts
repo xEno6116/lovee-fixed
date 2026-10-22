@@ -198,7 +198,7 @@ export async function createSiteForOwner(ownerId: number, input: { title: string
         id: repository.nextSettingsId++,
         siteId,
         pinHash: hashPin(DEFAULT_PIN),
-        startDate: "2024-04-06",
+        startDate: "",
         memoryMessage: "บันทึกความทรงจำของเรา",
         musicUrl: "",
         expiresAt: null,
