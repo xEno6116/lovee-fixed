@@ -546,6 +546,7 @@ async function updateSiteSettings(siteId, input) {
     site.settings = {
       ...site.settings,
       memoryMessage: input.memoryMessage,
+      secretMessage: input.secretMessage ?? site.settings.secretMessage ?? "",
       startDate: input.startDate,
       musicUrl: input.musicUrl,
       ...input.expiresAt !== void 0 ? { expiresAt: input.expiresAt } : {},
@@ -655,6 +656,7 @@ var siteInput = z2.object({ slug: slugSchema });
 var settingsInput = z2.object({
   slug: slugSchema,
   memoryMessage: z2.string().trim().min(1).max(5e3),
+  secretMessage: z2.string().max(5e3).optional(),
   startDate: z2.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   pin: z2.string().regex(/^\d{4}$/).optional(),
   musicUrl: z2.string().url().or(z2.literal("")),
@@ -717,7 +719,10 @@ var siteRouter = router({
       if (!allowPinAttempt(`${address}:${input.slug}`)) throw new TRPCError3({ code: "TOO_MANY_REQUESTS", message: "\u0E25\u0E2D\u0E07 PIN \u0E21\u0E32\u0E01\u0E40\u0E01\u0E34\u0E19\u0E44\u0E1B \u0E01\u0E23\u0E38\u0E13\u0E32\u0E23\u0E2D 1 \u0E19\u0E32\u0E17\u0E35" });
       if (!await verifyRecaptcha(input.recaptchaToken)) return { valid: false, bot: true };
       const site = await requireOwnedSite(ctx.user.id, input.slug);
-      return { valid: await verifySitePin(site.id, input.pin) };
+      const valid = await verifySitePin(site.id, input.pin);
+      if (!valid) return { valid: false };
+      const secretMessage = site.settings?.secretMessage ?? "";
+      return secretMessage ? { valid: true, secretMessage } : { valid: true };
     })
   }),
   admin: router({
@@ -1042,25 +1047,8 @@ var sdk = new SDKServer();
 // server/_core/context.ts
 async function createContext(opts) {
   let user = null;
-  if (true) {
-    try {
-      const publicOwnerOpenId = ENV.ownerOpenId || "public-owner";
-      user = await getUserByOpenId(publicOwnerOpenId) ?? null;
-      if (!user) {
-        await upsertUser({
-          openId: publicOwnerOpenId,
-          name: ENV.ownerName,
-          loginMethod: "owner-public",
-          lastSignedIn: /* @__PURE__ */ new Date()
-        });
-        user = await getUserByOpenId(publicOwnerOpenId) ?? null;
-      }
-    } catch (error) {
-      console.error("[Auth] Failed to resolve public owner", error);
-    }
-  }
   try {
-    if (!user) user = await sdk.authenticateRequest(opts.req);
+    user = await sdk.authenticateRequest(opts.req);
   } catch (error) {
     user = null;
   }
@@ -1082,7 +1070,7 @@ function registerOAuthRoutes(app) {
   app.post("/api/owner-login", async (req, res) => {
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     const expected = ENV.ownerLoginPassword;
-    const matches = expected && password && password.length === expected.length ? timingSafeEqual(Buffer.from(password), Buffer.from(expected)) : false;
+    const matches = /^\d{4,12}$/.test(expected) && /^\d{4,12}$/.test(password) && password.length === expected.length ? timingSafeEqual(Buffer.from(password), Buffer.from(expected)) : false;
     if (!matches || !ENV.ownerOpenId) {
       res.status(401).json({ error: "\u0E23\u0E2B\u0E31\u0E2A\u0E40\u0E08\u0E49\u0E32\u0E02\u0E2D\u0E07\u0E44\u0E21\u0E48\u0E16\u0E39\u0E01\u0E15\u0E49\u0E2D\u0E07" });
       return;

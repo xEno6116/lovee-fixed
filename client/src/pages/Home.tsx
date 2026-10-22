@@ -33,6 +33,7 @@ export default function Home({ slug }: { slug: string }) {
   const verifyPin = trpc.site.private.verifyPin.useMutation();
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
+  const [secretMessage, setSecretMessage] = useState("");
   const [loginError, setLoginError] = useState("");
   const [unlocked, setUnlocked] = useState(false);
   const [clock, setClock] = useState<TimeParts>({ days: 0, hours: 0, minutes: 0, seconds: 0 });
@@ -88,8 +89,8 @@ export default function Home({ slug }: { slug: string }) {
       const recaptchaToken = window.grecaptcha?.getResponse(captchaWidget.current ?? undefined) ?? "";
       if (recaptchaEnabled && !recaptchaToken) { setError("กรุณาติ๊กยืนยันว่าไม่ใช่บอทก่อน"); setPin(""); return; }
       verifyPin.mutate({ slug, pin: next, recaptchaToken }, {
-      onSuccess: ({ valid }) => {
-        if (valid) { setUnlocked(true); setPin(""); }
+      onSuccess: ({ valid, secretMessage: verifiedSecretMessage }) => {
+        if (valid) { setSecretMessage(verifiedSecretMessage ?? ""); setUnlocked(true); setPin(""); }
         else { setError("การยืนยันไม่ผ่าน หรือ PIN ไม่ถูกต้อง"); window.setTimeout(() => setPin(""), 450); window.grecaptcha?.reset(captchaWidget.current ?? undefined); }
       },
       onError: () => { setError("ตรวจสอบ PIN ไม่สำเร็จ"); setPin(""); window.grecaptcha?.reset(captchaWidget.current ?? undefined); },
@@ -126,6 +127,7 @@ export default function Home({ slug }: { slug: string }) {
       <header className="legacy-header"><h1>{site.site.title}</h1><div className="legacy-clock"><ClockBox value={clock.days} label="วัน" /><ClockBox value={clock.hours} label="ชั่วโมง" /><ClockBox value={clock.minutes} label="นาที" /><ClockBox value={clock.seconds} label="วินาที" /></div></header>
       <section className="legacy-section legacy-video-section"><div className="legacy-section-inner"><h3>วิดีโอ 🎬</h3><p className="legacy-section-hint">เลื่อนด้วยลูกศรเพื่อดูช่องวิดีโอทั้ง 4 ช่อง</p><div className="legacy-video-shell"><button type="button" className="legacy-arrow legacy-arrow-prev" onClick={() => setVideoIndex((index) => (index + 3) % 4)} aria-label="ช่องวิดีโอก่อนหน้า"><ChevronLeft size={22} /></button><div className="legacy-video-viewport"><div className="legacy-video-track" style={{ transform: `translateX(-${videoIndex * 100}%)` }}>{videoSlots.map((asset, index) => <div className="legacy-video-slide" key={asset?.id ?? `slot-${index}`}>{asset ? <video className="size-full object-contain bg-slate-950" controls playsInline src={asset.url} /> : <div className="legacy-empty-media"><Video size={34} /><strong>ช่องวิดีโอ {index + 1}</strong><span>ยังไม่มีไฟล์</span></div>}</div>)}</div></div><button type="button" className="legacy-arrow legacy-arrow-next" onClick={() => setVideoIndex((index) => (index + 1) % 4)} aria-label="ช่องวิดีโอถัดไป"><ChevronRight size={22} /></button></div><p className="legacy-counter">{videoIndex + 1}/4</p></div></section>
       <section className="legacy-section legacy-message-section"><div className="legacy-glass-card"><p>{site.settings.memoryMessage}</p></div></section>
+      {secretMessage && <section className="legacy-section legacy-message-section"><div className="legacy-glass-card"><h3>ข้อความลับ</h3><p>{secretMessage}</p></div></section>}
       <section className="legacy-section legacy-gallery-section"><h3>รูปที่คบกัน 📸</h3><div className="legacy-photo-slider"><button type="button" className="legacy-arrow legacy-photo-prev" onClick={() => movePhoto(-1)} disabled={!photos.length} aria-label="รูปก่อนหน้า"><ChevronLeft size={22} /></button><div className="legacy-photo-viewport"><div className="legacy-photo-track" style={{ transform: `translateX(-${photoIndex * 100}%)` }}>{photos.length ? photos.map((asset) => <div className="legacy-photo-slide" key={asset.id}><img src={asset.url} alt={asset.originalName} /></div>) : <div className="legacy-photo-slide"><div className="legacy-empty-photo">ยังไม่มีรูปภาพ</div></div>}</div></div><button type="button" className="legacy-arrow legacy-photo-next" onClick={() => movePhoto(1)} disabled={!photos.length} aria-label="รูปถัดไป"><ChevronRight size={22} /></button></div></section>
       <footer className="legacy-footer">อยู่ด้วยกันตลอดไปนะ 💖🌷</footer>
     </main>}

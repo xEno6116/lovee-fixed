@@ -13,6 +13,7 @@ type StoredSettings = {
   pinHash: string;
   startDate: string;
   memoryMessage: string;
+  secretMessage?: string;
   musicUrl: string;
   expiresAt?: string | null;
   createdAt: string;
@@ -266,7 +267,7 @@ export async function verifySitePin(siteId: number, pin: string) {
   return Boolean(settings && settings.pinHash === hashPin(pin));
 }
 
-export async function updateSiteSettings(siteId: number, input: { memoryMessage: string; startDate: string; pin?: string; musicUrl: string; expiresAt?: string | null }) {
+export async function updateSiteSettings(siteId: number, input: { memoryMessage: string; secretMessage?: string; startDate: string; pin?: string; musicUrl: string; expiresAt?: string | null }) {
   return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update settings ${siteId}`, (repository) => {
     const site = getSite(repository, siteId);
     if (!site) throw new Error("ไม่พบเว็บไซต์สำหรับบันทึกการตั้งค่า");
@@ -274,6 +275,7 @@ export async function updateSiteSettings(siteId: number, input: { memoryMessage:
     site.settings = {
       ...site.settings,
       memoryMessage: input.memoryMessage,
+      secretMessage: input.secretMessage ?? site.settings.secretMessage ?? "",
       startDate: input.startDate,
       musicUrl: input.musicUrl,
       ...(input.expiresAt !== undefined ? { expiresAt: input.expiresAt } : {}),

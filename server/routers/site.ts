@@ -26,6 +26,7 @@ const siteInput = z.object({ slug: slugSchema });
 const settingsInput = z.object({
   slug: slugSchema,
   memoryMessage: z.string().trim().min(1).max(5000),
+  secretMessage: z.string().max(5000).optional(),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   pin: z.string().regex(/^\d{4}$/).optional(),
   musicUrl: z.string().url().or(z.literal("")),
@@ -101,7 +102,10 @@ export const siteRouter = router({
         if (!allowPinAttempt(`${address}:${input.slug}`)) throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "ลอง PIN มากเกินไป กรุณารอ 1 นาที" });
         if (!(await verifyRecaptcha(input.recaptchaToken))) return { valid: false, bot: true };
         const site = await requireOwnedSite(ctx.user.id, input.slug);
-        return { valid: await verifySitePin(site.id, input.pin) };
+        const valid = await verifySitePin(site.id, input.pin);
+        if (!valid) return { valid: false };
+        const secretMessage = site.settings?.secretMessage ?? "";
+        return secretMessage ? { valid: true, secretMessage } : { valid: true };
       }),
   }),
   admin: router({
