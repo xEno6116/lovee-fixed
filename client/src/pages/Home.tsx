@@ -148,11 +148,11 @@ export default function Home({ slug }: { slug: string }) {
     <audio ref={audioRef} src={site.settings.musicUrl || undefined} loop onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} />
     {!unlocked && <section className="legacy-lock-screen">
       <Link href={`/site/${slug}/settings`} className="legacy-settings-trigger" aria-label="Settings"><Settings size={20} /></Link>
-      <div className="mb-10 text-center"><h2>{site.site.title}</h2></div>
+      <div className="mb-10 text-center"><h2>{site.site.title}</h2><p className="legacy-lock-hint">ลิงก์นี้เป็นลิงก์ส่วนตัว กรุณากรอกรหัสผ่าน 4 หลักเพื่อเข้าชม</p></div>
       <div ref={captchaRef} className="flex justify-center mb-5" aria-label="ยืนยันว่าไม่ใช่บอท" />
-      <div className="legacy-dots" aria-label="PIN progress">{Array.from({ length: 4 }, (_, index) => <span key={index} className={index < pin.length ? "active" : ""} />)}</div>
+      <div className="legacy-dots" aria-label="รหัสผ่าน progress">{Array.from({ length: 4 }, (_, index) => <span key={index} className={index < pin.length ? "active" : ""} />)}</div>
       <div className="legacy-keypad">{Array.from({ length: 9 }, (_, index) => <button type="button" key={index + 1} className="legacy-key-btn" onClick={() => pressNumber(String(index + 1))}>{index + 1}</button>)}<span /><button type="button" className="legacy-key-btn" onClick={() => pressNumber("0")}>0</button><button type="button" className="legacy-key-btn soft" onClick={() => setPin((value) => value.slice(0, -1))} aria-label="ลบตัวเลข">←</button></div>
-      {pin.length === 4 && <button type="button" className="legacy-save-btn mt-4" onClick={() => void verifyPublicPin(pin)} disabled={verifying}>{verifying ? "กำลังตรวจสอบ…" : "ยืนยัน PIN"}</button>}
+      {pin.length === 4 && <button type="button" className="legacy-save-btn mt-4" onClick={() => void verifyPublicPin(pin)} disabled={verifying}>{verifying ? "กำลังตรวจสอบ…" : "เข้าชมความทรงจำ"}</button>}
       <p className="legacy-lock-error">{verifying ? "กำลังตรวจสอบ…" : error}</p>
     </section>}
     {unlocked && <main className="legacy-main-content">

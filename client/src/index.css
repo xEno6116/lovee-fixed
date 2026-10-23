@@ -351,3 +351,10 @@ button, a { touch-action: manipulation; }
   .legacy-arrow { width: 36px; height: 36px; }
   .legacy-photo-slider { padding-left: 38px; padding-right: 38px; }
 }
+
+.legacy-lock-hint { max-width: 22rem; margin: 10px auto 0; color: #9d174d; font-family: 'Noto Sans Thai', sans-serif; font-size: .85rem; line-height: 1.5; }
+.legacy-dashboard-page article button, .legacy-dashboard-page article a { min-height: 42px; }
+@media (max-width: 640px) {
+  .legacy-lock-hint { padding: 0 12px; font-size: .8rem; }
+  .legacy-dashboard-page article button, .legacy-dashboard-page article a { flex: 1 1 auto; justify-content: center; }
+}
