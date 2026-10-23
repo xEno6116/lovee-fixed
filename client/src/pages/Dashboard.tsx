@@ -67,7 +67,6 @@ export default function Dashboard() {
         if (payload?.error?.includes("ยืนยันอีเมล")) { setNeedsVerification(true); setVerificationEmail(authEmail); }
         throw new Error(payload?.error || "ดำเนินการไม่สำเร็จ");
       }
-      if (authMode === "register") { setNeedsVerification(true); setVerificationEmail(authEmail); setVerificationMessage("สมัครสำเร็จแล้ว กรุณาตรวจสอบอีเมลเพื่อยืนยันก่อนเข้าสู่ระบบ"); return; }
       window.location.assign("/dashboard");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "ดำเนินการไม่สำเร็จ"); }
     finally { setAuthPending(false); }

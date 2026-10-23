@@ -45,10 +45,8 @@ export function registerOAuthRoutes(app: Express) {
     if (validationError) { res.status(400).json({ error: validationError }); return; }
     if (name.length < 2 || name.length > 80) { res.status(400).json({ error: "กรุณากรอกชื่อ 2-80 ตัวอักษร" }); return; }
     try {
-      const token = newVerificationToken();
-      const user = await db.createLocalUser({ email, name, passwordHash: hashPassword(password), verificationTokenHash: hashToken(token), verificationTokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() });
-      await sendVerificationEmail({ to: email, name, verificationUrl: verificationUrl(req, token) });
-      res.json({ ok: true, requiresVerification: true, email });
+      const user = await db.createLocalUser({ email, name, passwordHash: hashPassword(password), verificationTokenHash: null, verificationTokenExpiresAt: null });
+      await createLocalSession(req, res, user);
     } catch (error) {
       const message = error instanceof Error ? error.message : "สมัครสมาชิกไม่สำเร็จ";
       res.status(message.includes("มีบัญชี") ? 409 : 500).json({ error: message });
@@ -60,7 +58,6 @@ export function registerOAuthRoutes(app: Express) {
     if (!email || !password) { res.status(400).json({ error: "กรุณากรอกอีเมลและรหัสผ่าน" }); return; }
     const user = await db.getLocalUserByEmail(email);
     if (!user?.passwordHash || !verifyPassword(password, user.passwordHash)) { res.status(401).json({ error: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" }); return; }
-    if (!user.emailVerifiedAt) { res.status(403).json({ error: "กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ", code: "EMAIL_NOT_VERIFIED" }); return; }
     await createLocalSession(req, res, user);
   });
 

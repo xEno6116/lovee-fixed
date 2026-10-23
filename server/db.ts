@@ -142,7 +142,7 @@ export async function getLocalUserByEmail(email: string): Promise<StoredUser | u
   return data.users.find((item) => item.email?.toLowerCase() === normalized && item.loginMethod === "local-password");
 }
 
-export async function createLocalUser(input: { email: string; name: string; passwordHash: string; verificationTokenHash: string; verificationTokenExpiresAt: string }): Promise<StoredUser> {
+export async function createLocalUser(input: { email: string; name: string; passwordHash: string; verificationTokenHash?: string | null; verificationTokenExpiresAt?: string | null }): Promise<StoredUser> {
   const normalizedEmail = input.email.trim().toLowerCase();
   const openId = `local_${nanoid(24)}`;
   return updateJson(USER_DATA_PATH, emptyUserRepository, `anniversary: register local user ${normalizedEmail}`, (repository) => {
@@ -161,9 +161,9 @@ export async function createLocalUser(input: { email: string; name: string; pass
       updatedAt: now,
       lastSignedIn: now,
       passwordHash: input.passwordHash,
-      emailVerifiedAt: null,
-      verificationTokenHash: input.verificationTokenHash,
-      verificationTokenExpiresAt: input.verificationTokenExpiresAt,
+      emailVerifiedAt: now,
+      verificationTokenHash: input.verificationTokenHash ?? null,
+      verificationTokenExpiresAt: input.verificationTokenExpiresAt ?? null,
     };
     repository.users.push(user);
     return { data: repository, result: user };
