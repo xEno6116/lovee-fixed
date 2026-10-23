@@ -70,6 +70,7 @@ type StoredUser = {
   createdAt: string;
   updatedAt: string;
   lastSignedIn: string;
+  passwordHash?: string;
 };
 
 type UserRepository = {
@@ -121,12 +122,44 @@ function sortAssets(assets: StoredAsset[]) {
 }
 
 function toApplicationUser(user: StoredUser): User {
+  const { passwordHash: _passwordHash, ...safeUser } = user;
   return {
-    ...user,
-    createdAt: new Date(user.createdAt),
-    updatedAt: new Date(user.updatedAt),
-    lastSignedIn: new Date(user.lastSignedIn),
+    ...safeUser,
+    createdAt: new Date(safeUser.createdAt),
+    updatedAt: new Date(safeUser.updatedAt),
+    lastSignedIn: new Date(safeUser.lastSignedIn),
   };
+}
+
+export async function getLocalUserByEmail(email: string): Promise<StoredUser | undefined> {
+  const { data } = await readUserRepository();
+  const normalized = email.trim().toLowerCase();
+  return data.users.find((item) => item.email?.toLowerCase() === normalized && item.loginMethod === "local-password");
+}
+
+export async function createLocalUser(input: { email: string; name: string; passwordHash: string }): Promise<StoredUser> {
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const openId = `local_${nanoid(24)}`;
+  return updateJson(USER_DATA_PATH, emptyUserRepository, `anniversary: register local user ${normalizedEmail}`, (repository) => {
+    if (repository.users.some((item) => item.email?.toLowerCase() === normalizedEmail)) {
+      throw new Error("อีเมลนี้มีบัญชีอยู่แล้ว");
+    }
+    const now = new Date().toISOString();
+    const user: StoredUser = {
+      id: repository.nextUserId++,
+      openId,
+      name: input.name.trim(),
+      email: normalizedEmail,
+      loginMethod: "local-password",
+      role: "user",
+      createdAt: now,
+      updatedAt: now,
+      lastSignedIn: now,
+      passwordHash: input.passwordHash,
+    };
+    repository.users.push(user);
+    return { data: repository, result: user };
+  });
 }
 
 /** User records are kept in GitHub JSON while retaining the OAuth session contract. */
