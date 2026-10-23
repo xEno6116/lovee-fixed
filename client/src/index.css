@@ -527,3 +527,36 @@ button, a { touch-action: manipulation; }
 .legacy-element-controls input.legacy-element-number { width: 64px; min-height: 30px; padding: 0 5px; border: 1px solid #efcddd; border-radius: 8px; background: #fff; color: #8b2855; font-size: 11px; text-align: right; }
 .legacy-grid-snap { justify-self: start; min-height: 32px; padding: 0 10px; border: 1px solid #f0cddd; border-radius: 10px; background: #fff; color: #9a3c6c; font-size: 11px; font-weight: 700; }
 .legacy-grid-snap.is-active { border-color: #db2777; background: #fce7f3; color: #9d174d; }
+
+
+.admin-dashboard-hero h1 { color: #4a1732; }
+.admin-public-url { display: inline-flex; align-items: center; gap: 4px; margin-top: 8px; color: #be185d; font-size: .8rem; font-weight: 700; text-decoration: none; }
+.admin-public-url:hover { text-decoration: underline; }
+.admin-loading-card,.admin-query-error { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 20px; border: 1px solid #f3d4e3; border-radius: 16px; background: #fff; color: #9d3768; }
+.admin-loading-card { justify-content: center; color: #9d6b83; }
+.admin-query-error p { margin: 4px 0 0; color: #a6788e; font-size: .82rem; }
+.admin-section-title { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+.admin-section-title h2 { margin: 3px 0 0; color: #4a1732; font-size: 1.2rem; font-weight: 800; }
+.admin-section-title p:not(.admin-kicker) { margin: 3px 0 0; color: #9f718a; font-size: .82rem; }
+.admin-setup-card { padding: 22px; border: 1px solid #f3d5e4; border-radius: 22px; background: linear-gradient(135deg,#fffafd,#fff 60%,#fff7fb); box-shadow: 0 7px 20px rgba(90,24,55,.04); }
+.admin-setup-progress { display: grid; width: 48px; height: 48px; flex: 0 0 48px; place-items: center; border: 2px solid #f4c4da; border-radius: 50%; background: #fff; color: #be185d; font-size: .83rem; font-weight: 800; }
+.admin-setup-progress-track { height: 7px; overflow: hidden; margin: 14px 0; border-radius: 999px; background: #fce7f3; }
+.admin-setup-progress-track span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#f472b6,#be185d); transition: width .25s ease; }
+.admin-checklist { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.admin-checklist-item { display: flex; min-width: 0; align-items: center; gap: 9px; padding: 11px 12px; border: 1px solid #f2e4eb; border-radius: 12px; background: #fff; color: #6b4258; font-size: .82rem; text-decoration: none; }
+.admin-checklist-item:hover { border-color: #eda9c7; background: #fff8fb; }
+.admin-checklist-item.is-done { color: #587565; }
+.admin-check-icon { display: grid; width: 22px; height: 22px; flex: 0 0 22px; place-items: center; border: 1px solid #e8b8ce; border-radius: 50%; color: #fff; }
+.admin-checklist-item.is-done .admin-check-icon { border-color: #86c5a1; background: #29a366; }
+.admin-check-icon > span { width: 7px; height: 7px; border-radius: 50%; background: #e9a7c3; }
+.admin-checklist-item b { margin-left: auto; color: #be185d; font-size: .72rem; white-space: nowrap; }
+.admin-checklist-item.is-done b { color: #37865a; }
+.admin-management-section .admin-management-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.admin-management-section .admin-management-card { min-height: 95px; align-items: center; padding: 17px; text-decoration: none; }
+.admin-management-section .admin-management-card strong { color: #52243d; }
+.admin-management-section .admin-management-card > div { min-width: 0; }
+.legacy-settings-nav { position: sticky; z-index: 30; top: 8px; display: flex; flex-wrap: wrap; gap: 7px; padding: 8px; border: 1px solid rgba(243,212,227,.9); border-radius: 14px; background: rgba(255,255,255,.94); box-shadow: 0 6px 18px rgba(80,20,40,.08); backdrop-filter: blur(12px); }
+.legacy-settings-nav a { display: inline-flex; min-height: 34px; align-items: center; justify-content: center; padding: 0 11px; border: 1px solid #f4d8e5; border-radius: 999px; background: #fff8fb; color: #9d3568; font-size: 11px; font-weight: 700; text-decoration: none; }
+.legacy-settings-nav a:hover { border-color: #db2777; background: #fce7f3; }
+#settings-layout,#settings-media,#settings-content,#settings-privacy { scroll-margin-top: 78px; }
+@media (max-width: 760px) { .admin-management-section .admin-management-grid { grid-template-columns: 1fr; }.admin-checklist { grid-template-columns: 1fr; }.admin-setup-card { padding: 17px; }.admin-section-title h2 { font-size: 1.05rem; }.legacy-settings-nav { top: 4px; gap: 5px; padding: 6px; }.legacy-settings-nav a { min-height: 31px; padding: 0 8px; font-size: 10px; } }
