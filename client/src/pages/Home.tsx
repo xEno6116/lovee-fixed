@@ -27,7 +27,7 @@ function ClockBox({ value, label }: { value: number; label: string }) {
 }
 
 export default function Home({ slug }: { slug: string }) {
-  const siteQuery = trpc.site.public.get.useQuery({ slug });
+  const siteQuery = trpc.site.public.get.useQuery({ slug }, { staleTime: 60_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false, refetchOnReconnect: false });
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [secretMessage, setSecretMessage] = useState("");
@@ -56,18 +56,24 @@ export default function Home({ slug }: { slug: string }) {
 
   useEffect(() => {
     if (!site?.settings.startDate) return;
-    const updateClock = () => setClock(elapsedFrom(site.settings.startDate));
-    updateClock();
-    const timer = window.setInterval(updateClock, 1_000);
-    return () => window.clearInterval(timer);
+    let timer: number | undefined;
+    const updateClock = () => { if (document.visibilityState === "visible") setClock(elapsedFrom(site.settings.startDate)); };
+    const start = () => { if (document.visibilityState === "visible") { updateClock(); timer = window.setInterval(updateClock, 1_000); } };
+    const stop = () => { if (timer !== undefined) { window.clearInterval(timer); timer = undefined; } };
+    const onVisibility = () => { stop(); start(); };
+    start(); document.addEventListener("visibilitychange", onVisibility);
+    return () => { stop(); document.removeEventListener("visibilitychange", onVisibility); };
   }, [site?.settings.startDate]);
 
   useEffect(() => {
     if (!site?.locked || !site.deletionAt) return;
-    const updateClock = () => setDeletionClock(remainingUntil(site.deletionAt!));
-    updateClock();
-    const timer = window.setInterval(updateClock, 1_000);
-    return () => window.clearInterval(timer);
+    let timer: number | undefined;
+    const updateClock = () => { if (document.visibilityState === "visible") setDeletionClock(remainingUntil(site.deletionAt!)); };
+    const start = () => { if (document.visibilityState === "visible") { updateClock(); timer = window.setInterval(updateClock, 1_000); } };
+    const stop = () => { if (timer !== undefined) { window.clearInterval(timer); timer = undefined; } };
+    const onVisibility = () => { stop(); start(); };
+    start(); document.addEventListener("visibilitychange", onVisibility);
+    return () => { stop(); document.removeEventListener("visibilitychange", onVisibility); };
   }, [site?.locked, site?.deletionAt]);
 
   useEffect(() => {
@@ -81,9 +87,17 @@ export default function Home({ slug }: { slug: string }) {
       return false;
     };
     if (renderCaptcha()) return;
-    const timer = window.setInterval(() => { if (renderCaptcha()) window.clearInterval(timer); }, 200);
-    return () => window.clearInterval(timer);
+    let timer: number | undefined;
+    const retry = () => { if (renderCaptcha()) { if (timer !== undefined) window.clearInterval(timer); timer = undefined; } };
+    timer = window.setInterval(retry, 500);
+    return () => { if (timer !== undefined) window.clearInterval(timer); };
   }, [site?.site.id]);
+
+  useEffect(() => {
+    const pauseWhenHidden = () => { if (document.visibilityState === "hidden") { audioRef.current?.pause(); setPlaying(false); } };
+    document.addEventListener("visibilitychange", pauseWhenHidden);
+    return () => document.removeEventListener("visibilitychange", pauseWhenHidden);
+  }, []);
 
   const verifyPublicPin = async (candidate: string) => {
     if (verifying || candidate.length !== 4) return;
@@ -145,7 +159,7 @@ export default function Home({ slug }: { slug: string }) {
   const movePhoto = (direction: number) => { if (photos.length) setPhotoIndex((index) => (index + direction + photos.length) % photos.length); };
 
   return <div className="legacy-anniversary min-h-screen" style={{ backgroundColor: themeBackground, color: site.settings.themeMode === "night" ? "#f8fafc" : undefined, fontFamily: themeFont }}>
-    <audio ref={audioRef} src={site.settings.musicUrl || undefined} loop onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} />
+    <audio ref={audioRef} src={site.settings.musicUrl || undefined} preload="none" loop onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} />
     {!unlocked && <section className="legacy-lock-screen">
       <Link href={`/site/${slug}/settings`} className="legacy-settings-trigger" aria-label="Settings"><Settings size={20} /></Link>
       <div className="mb-10 text-center"><h2>{site.site.title}</h2><p className="legacy-lock-hint">ลิงก์นี้เป็นลิงก์ส่วนตัว กรุณากรอกรหัสผ่าน 4 หลักเพื่อเข้าชม</p></div>
@@ -157,10 +171,10 @@ export default function Home({ slug }: { slug: string }) {
     </section>}
     {unlocked && <main className="legacy-main-content">
       <header className="legacy-header"><h1>{site.site.title}</h1><div className="legacy-clock"><ClockBox value={clock.days} label="วัน" /><ClockBox value={clock.hours} label="ชั่วโมง" /><ClockBox value={clock.minutes} label="นาที" /><ClockBox value={clock.seconds} label="วินาที" /></div></header>
-      <section className="legacy-section legacy-video-section"><div className="legacy-section-inner"><h3>วิดีโอ 🎬</h3><p className="legacy-section-hint">เลื่อนด้วยลูกศรเพื่อดูช่องวิดีโอทั้ง 4 ช่อง</p><div className="legacy-video-shell"><button type="button" className="legacy-arrow legacy-arrow-prev" onClick={() => setVideoIndex((index) => (index + 3) % 4)} aria-label="ช่องวิดีโอก่อนหน้า"><ChevronLeft size={22} /></button><div className="legacy-video-viewport"><div className="legacy-video-track" style={{ transform: `translateX(-${videoIndex * 100}%)` }}>{videoSlots.map((asset, index) => <div className="legacy-video-slide" key={asset?.id ?? `slot-${index}`}>{asset ? <video className="size-full object-contain bg-slate-950" controls playsInline src={asset.url} /> : <div className="legacy-empty-media"><Video size={34} /><strong>ช่องวิดีโอ {index + 1}</strong><span>ยังไม่มีไฟล์</span></div>}</div>)}</div></div><button type="button" className="legacy-arrow legacy-arrow-next" onClick={() => setVideoIndex((index) => (index + 1) % 4)} aria-label="ช่องวิดีโอถัดไป"><ChevronRight size={22} /></button></div><p className="legacy-counter">{videoIndex + 1}/4</p></div></section>
+      <section className="legacy-section legacy-video-section"><div className="legacy-section-inner"><h3>วิดีโอ 🎬</h3><p className="legacy-section-hint">เลื่อนด้วยลูกศรเพื่อดูช่องวิดีโอทั้ง 4 ช่อง</p><div className="legacy-video-shell"><button type="button" className="legacy-arrow legacy-arrow-prev" onClick={() => setVideoIndex((index) => (index + 3) % 4)} aria-label="ช่องวิดีโอก่อนหน้า"><ChevronLeft size={22} /></button><div className="legacy-video-viewport"><div className="legacy-video-track" style={{ transform: `translateX(-${videoIndex * 100}%)` }}>{videoSlots.map((asset, index) => <div className="legacy-video-slide" key={asset?.id ?? `slot-${index}`}>{asset ? <video className="size-full object-contain bg-slate-950" controls playsInline preload="none" src={asset.url} /> : <div className="legacy-empty-media"><Video size={34} /><strong>ช่องวิดีโอ {index + 1}</strong><span>ยังไม่มีไฟล์</span></div>}</div>)}</div></div><button type="button" className="legacy-arrow legacy-arrow-next" onClick={() => setVideoIndex((index) => (index + 1) % 4)} aria-label="ช่องวิดีโอถัดไป"><ChevronRight size={22} /></button></div><p className="legacy-counter">{videoIndex + 1}/4</p></div></section>
       <section className="legacy-section legacy-message-section"><div className="legacy-glass-card"><p>{site.settings.memoryMessage}</p></div></section>
       {secretMessage && <section className="legacy-section legacy-message-section"><div className="legacy-glass-card"><h3>ข้อความลับ</h3><p>{secretMessage}</p></div></section>}
-      <section className="legacy-section legacy-gallery-section"><h3>รูปที่คบกัน 📸</h3><div className="legacy-photo-slider"><button type="button" className="legacy-arrow legacy-photo-prev" onClick={() => movePhoto(-1)} disabled={!photos.length} aria-label="รูปก่อนหน้า"><ChevronLeft size={22} /></button><div className="legacy-photo-viewport"><div className="legacy-photo-track" style={{ transform: `translateX(-${photoIndex * 100}%)` }}>{photos.length ? photos.map((asset) => <div className="legacy-photo-slide" key={asset.id}><img src={asset.url} alt={asset.originalName} /></div>) : <div className="legacy-photo-slide"><div className="legacy-empty-photo">ยังไม่มีรูปภาพ</div></div>}</div></div><button type="button" className="legacy-arrow legacy-photo-next" onClick={() => movePhoto(1)} disabled={!photos.length} aria-label="รูปถัดไป"><ChevronRight size={22} /></button></div></section>
+      <section className="legacy-section legacy-gallery-section"><h3>รูปที่คบกัน 📸</h3><div className="legacy-photo-slider"><button type="button" className="legacy-arrow legacy-photo-prev" onClick={() => movePhoto(-1)} disabled={!photos.length} aria-label="รูปก่อนหน้า"><ChevronLeft size={22} /></button><div className="legacy-photo-viewport"><div className="legacy-photo-track" style={{ transform: `translateX(-${photoIndex * 100}%)` }}>{photos.length ? photos.map((asset) => <div className="legacy-photo-slide" key={asset.id}><img src={asset.url} alt={asset.originalName} loading="lazy" decoding="async" /></div>) : <div className="legacy-photo-slide"><div className="legacy-empty-photo">ยังไม่มีรูปภาพ</div></div>}</div></div><button type="button" className="legacy-arrow legacy-photo-next" onClick={() => movePhoto(1)} disabled={!photos.length} aria-label="รูปถัดไป"><ChevronRight size={22} /></button></div></section>
       <section className="legacy-section legacy-message-section"><div className="legacy-glass-card"><h3><Mail size={18} className="inline-block" /> เขียนจดหมายถึงเรา</h3><p className="legacy-section-hint">ฝากข้อความไว้ แล้วระบบจะส่งเข้าอีเมลเจ้าของเว็บไซต์</p><form className="mt-4 grid gap-3" onSubmit={sendLetter}><input required maxLength={80} value={letterName} onChange={(event) => setLetterName(event.target.value)} placeholder="ชื่อของคุณ" className="rounded-xl border border-pink-200 bg-white px-3 py-2.5" /><input type="email" value={letterEmail} onChange={(event) => setLetterEmail(event.target.value)} placeholder="อีเมลสำหรับตอบกลับ (ไม่บังคับ)" className="rounded-xl border border-pink-200 bg-white px-3 py-2.5" /><textarea required minLength={3} maxLength={5000} value={letterMessage} onChange={(event) => setLetterMessage(event.target.value)} placeholder="เขียนข้อความจากหัวใจ…" className="min-h-28 rounded-xl border border-pink-200 bg-white px-3 py-2.5" /><button type="submit" className="legacy-save-btn" disabled={sendLetterMutation.isPending}>{sendLetterMutation.isPending ? "กำลังส่ง…" : "ส่งจดหมาย"}</button></form>{letterStatus && <p className="legacy-lock-error mt-3" role="status">{letterStatus}</p>}</div></section>
       <footer className="legacy-footer">อยู่ด้วยกันตลอดไปนะ 💖🌷</footer>
     </main>}
