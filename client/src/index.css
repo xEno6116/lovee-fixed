@@ -264,3 +264,90 @@
 .legacy-verification-box button:disabled { opacity: .6; }
 .legacy-verification-box small { display: block; margin-top: 9px; color: #be185d; font-size: .75rem; line-height: 1.45; }
 .legacy-verification-success { margin-top: 16px; border-radius: 12px; background: #ecfdf5; padding: 10px; color: #047857; font-size: .85rem; line-height: 1.5; }
+
+
+/* Final mobile usability pass: touch targets, safe areas, no accidental horizontal scroll. */
+html { overflow-x: hidden; }
+body { min-width: 320px; overflow-x: hidden; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button, a { touch-action: manipulation; }
+.dashboard-mobile-bar { padding-top: env(safe-area-inset-top); min-height: calc(3.5rem + env(safe-area-inset-top)); }
+.dashboard-main { min-width: 0; }
+
+@media (max-width: 640px) {
+  .dashboard-main { padding: 10px 12px 24px; }
+  .dashboard-mobile-bar { padding-left: max(8px, env(safe-area-inset-left)); padding-right: max(8px, env(safe-area-inset-right)); }
+  .dashboard-mobile-bar button { min-width: 44px; min-height: 44px; }
+  .legacy-auth-page { align-items: flex-start; padding: max(14px, env(safe-area-inset-top)) 12px 24px; }
+  .legacy-auth-card { margin: auto 0; border-radius: 22px; padding: 22px 16px; }
+  .legacy-auth-card h1 { font-size: 1.55rem; }
+  .legacy-auth-subtitle { font-size: .88rem; }
+  .legacy-auth-tabs { margin: 18px 0 16px; }
+  .legacy-auth-tabs button, .legacy-auth-form input, .legacy-owner-login input { min-height: 50px; font-size: 16px; }
+  .legacy-auth-form { gap: 12px; }
+  .legacy-owner-login div { flex-direction: column; }
+  .legacy-owner-login .legacy-close-btn { width: 100%; min-height: 46px; }
+  .legacy-verification-box button { min-height: 46px; font-size: .9rem; }
+
+  .legacy-admin-screen { align-items: flex-start; padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
+  .legacy-admin-box { width: 100%; max-height: none; min-height: calc(100svh - 16px); border-radius: 18px; padding: 16px 13px 22px; }
+  .legacy-admin-box > .flex { align-items: flex-start; padding-bottom: 14px; }
+  .legacy-admin-box h3 { max-width: 75%; font-size: 1.5rem; line-height: 1.15; }
+  .legacy-admin-stack { gap: 12px; }
+  .legacy-admin-stack > :first-child, .legacy-admin-stack > :nth-child(2), .legacy-admin-stack > :nth-child(3), .legacy-basic-card { padding: 13px; border-radius: 16px; }
+  .legacy-admin-stack label { font-size: 11px; }
+  .legacy-file-input, .legacy-basic-card textarea, .legacy-basic-card select, .legacy-basic-card input[type="date"], .legacy-basic-card input[type="datetime-local"] { min-height: 48px; font-size: 16px; }
+  .legacy-basic-card textarea { min-height: 100px; }
+  .legacy-admin-grid { grid-template-columns: 1fr; gap: 12px; }
+  .legacy-admin-grid.mt-4 { margin-top: 12px; }
+  .legacy-upload-row { min-height: 48px; padding: 8px; font-size: .84rem; }
+  .legacy-upload-row button { min-width: 40px; min-height: 40px; }
+  .legacy-admin-actions { gap: 9px; }
+  .legacy-admin-actions > *, .legacy-admin-stack > .legacy-close-btn { min-height: 48px; }
+  .legacy-guide { padding: 13px; }
+
+  .legacy-main-content { width: 100%; overflow: hidden; }
+  .legacy-header { padding: 2.25rem .75rem 1.75rem; }
+  .legacy-header h1 { margin-bottom: 1rem; font-size: 2.15rem; line-height: 1.12; overflow-wrap: anywhere; }
+  .legacy-clock { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; width: 100%; }
+  .legacy-clock-box { min-width: 0; padding: .65rem .25rem; border-radius: .75rem; }
+  .legacy-clock-box strong { font-size: 1.05rem; }
+  .legacy-clock-box span { font-size: .48rem; }
+  .legacy-section { padding: 0 .75rem; margin-bottom: 2.3rem; }
+  .legacy-section h3 { font-size: 1.7rem; line-height: 1.2; }
+  .legacy-section-hint { font-size: .82rem; line-height: 1.4; }
+  .legacy-video-shell { padding: 0 1.95rem; }
+  .legacy-video-slide { border-radius: 1rem; }
+  .legacy-arrow { width: 40px; height: 40px; }
+  .legacy-photo-slider { padding: 12px 42px; }
+  .legacy-photo-slide { padding: 6px; }
+  .legacy-photo-slide img { max-height: 62svh; border-radius: 12px; padding: 6px; }
+  .legacy-photo-prev { left: 0; }
+  .legacy-photo-next { right: 0; }
+  .legacy-glass-card { width: 100%; max-width: none; padding: 1rem; border-radius: 20px; }
+  .legacy-glass-card p { font-size: 1.05rem; }
+  .legacy-glass-card input, .legacy-glass-card textarea { min-height: 50px; font-size: 16px; }
+  .legacy-glass-card textarea { min-height: 120px; }
+  .legacy-glass-card .legacy-save-btn { min-height: 50px; width: 100%; }
+  .legacy-birthday-section { margin: 24px 8px; padding: 30px 10px; border-radius: 26px; }
+  .legacy-birthday-card { padding: 24px 14px; border-radius: 20px; }
+  .legacy-birthday-card h1 { font-size: 2rem; }
+  .legacy-cd-player { right: 10px; bottom: max(10px, env(safe-area-inset-bottom)); left: 10px; justify-content: flex-start; padding: 7px 12px 7px 7px; border-radius: 18px; transform: none; }
+  .legacy-cd-case { width: 48px; height: 48px; }
+  .legacy-cd-center { width: 17px; height: 17px; border-width: 3px; }
+  .legacy-cd-label { max-width: calc(100vw - 150px); font-size: 13px; }
+  .legacy-cd-button { width: 36px; height: 36px; margin-left: auto; }
+  .legacy-footer { padding: 0 .75rem 6rem; font-size: 1.45rem; }
+}
+
+@media (max-width: 380px) {
+  .legacy-keypad { grid-template-columns: repeat(3, 58px); gap: 12px; }
+  .legacy-key-btn { width: 58px; height: 58px; }
+  .legacy-lock-screen { padding: 1rem; }
+  .legacy-lock-screen h2 { max-width: 17rem; font-size: 1.8rem; line-height: 1.15; text-align: center; }
+  .legacy-dots { gap: .75rem; margin-bottom: 1.8rem; }
+  .legacy-dots span { width: 10px; height: 10px; }
+  .legacy-video-shell { padding: 0 1.75rem; }
+  .legacy-arrow { width: 36px; height: 36px; }
+  .legacy-photo-slider { padding-left: 38px; padding-right: 38px; }
+}
