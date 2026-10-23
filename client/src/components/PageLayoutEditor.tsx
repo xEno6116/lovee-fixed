@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent } from "react";
+import { useRef, useState, type DragEvent, type PointerEvent } from "react";
 import { Eye, EyeOff, Grip, Move, RotateCcw, Scaling } from "lucide-react";
 import {
   createDefaultPageElementLayouts,
@@ -50,6 +50,7 @@ export default function PageLayoutEditor({ layouts, onChange, hiddenSections, on
   const canvasRef = useRef<HTMLDivElement>(null);
   const interaction = useRef<Interaction | null>(null);
   const [selected, setSelected] = useState<PageElementId>("header");
+  const [snapToGrid, setSnapToGrid] = useState(false);
   const selectedLayout = layouts[selected];
   const canvasHeight = Math.max(860, ...PAGE_ELEMENT_IDS.map((id) => layouts[id].y * PAGE_EDITOR_PREVIEW_SCALE + 120));
 
@@ -67,10 +68,26 @@ export default function PageLayoutEditor({ layouts, onChange, hiddenSections, on
     const deltaX = (event.clientX - active.startX) / canvas.clientWidth * 100;
     const deltaY = (event.clientY - active.startY) / PAGE_EDITOR_PREVIEW_SCALE;
     const start = active.startLayout;
+    const snap = (value: number, step: number) => snapToGrid ? Math.round(value / step) * step : value;
     const next = active.mode === "move"
-      ? { ...start, x: Math.max(0, Math.min(100 - start.width * (start.scale ?? 1), start.x + deltaX)), y: Math.max(0, Math.min(8000, start.y + deltaY)) }
+      ? { ...start, x: Math.max(0, Math.min(100 - start.width * (start.scale ?? 1), snap(start.x + deltaX, 100 / 24))), y: Math.max(0, Math.min(8000, snap(start.y + deltaY, 24 / PAGE_EDITOR_PREVIEW_SCALE))) }
       : { ...start, width: Math.max(20, Math.min((100 - start.x) / (start.scale ?? 1), start.width + deltaX)) };
     onChange({ ...layouts, [active.id]: next });
+  };
+
+  const dropFromPalette = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const id = event.dataTransfer.getData("application/x-loveoffice-element") as PageElementId;
+    const canvas = canvasRef.current;
+    if (!PAGE_ELEMENT_IDS.includes(id) || !canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const layout = layouts[id];
+    const maxX = Math.max(0, 100 - layout.width * (layout.scale ?? 1));
+    const x = Math.max(0, Math.min(maxX, ((event.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(0, Math.min(8000, (event.clientY - rect.top) / PAGE_EDITOR_PREVIEW_SCALE));
+    onChange({ ...layouts, [id]: { ...layout, x, y } });
+    onHiddenSectionsChange(hiddenSections.filter((item) => item !== id));
+    setSelected(id);
   };
 
   const finishInteraction = (event: PointerEvent<HTMLDivElement>) => {
@@ -102,12 +119,12 @@ export default function PageLayoutEditor({ layouts, onChange, hiddenSections, on
   };
 
   return <section className="legacy-page-builder">
-    <div className="legacy-builder-heading"><div><h4>ตกแต่งทุกส่วนบนหน้าเว็บ</h4><p>จับบล็อกเพื่อย้ายตำแหน่ง ลากมุม ↘ เพื่อปรับความกว้าง เลือกบล็อกจากรายการเพื่อปรับขนาดรวมและชั้นหน้า/หลัง แล้วกดบันทึก</p></div><button type="button" className="legacy-builder-reset" onClick={reset}><RotateCcw size={14} /> คืนตำแหน่งเริ่มต้น</button></div>
-    <div className="legacy-element-palette" aria-label="เลือกบล็อกที่ต้องการแก้ไข">{PAGE_ELEMENT_IDS.map((id) => <button type="button" key={id} className={selected === id ? "is-selected" : ""} onClick={() => setSelected(id)}><span>{labels[id].icon}</span><strong>{labels[id].name}</strong></button>)}</div>
+    <div className="legacy-builder-heading"><div><h4>ตกแต่งทุกส่วนบนหน้าเว็บ</h4><p>ลากบล็อกจากรายการมาวางบนหน้า หรือจับบล็อกในตัวอย่างเพื่อย้ายตำแหน่ง ลากมุม ↘ เพื่อปรับความกว้าง และเลือกบล็อกเพื่อปรับขนาด/ชั้นหน้า-หลัง</p></div><button type="button" className="legacy-builder-reset" onClick={reset}><RotateCcw size={14} /> คืนตำแหน่งเริ่มต้น</button></div>
+    <div className="legacy-element-palette" aria-label="ลากบล็อกไปวางในตัวอย่างหน้าเว็บ">{PAGE_ELEMENT_IDS.map((id) => <button type="button" key={id} draggable onDragStart={(event) => { event.dataTransfer.setData("application/x-loveoffice-element", id); event.dataTransfer.effectAllowed = "move"; setSelected(id); }} className={selected === id ? "is-selected" : ""} onClick={() => setSelected(id)}><span>{labels[id].icon}</span><strong>{labels[id].name}</strong><Grip size={12} className="legacy-palette-grip" /></button>)}</div>
     <div className="legacy-element-visibility" aria-label="แสดงหรือซ่อนทุกส่วน">
       {PAGE_ELEMENT_IDS.map((id) => { const hidden = hiddenSections.includes(id); return <button type="button" key={id} className={hidden ? "is-hidden" : ""} onClick={() => onHiddenSectionsChange(hidden ? hiddenSections.filter((item) => item !== id) : [...hiddenSections, id])}><span>{hidden ? <EyeOff size={14} /> : <Eye size={14} />}</span>{labels[id].name}</button>; })}
     </div>
-    <div className="legacy-page-canvas-viewport" onPointerMove={moveInteraction} onPointerUp={finishInteraction} onPointerCancel={finishInteraction}>
+    <div className="legacy-page-canvas-viewport" onPointerMove={moveInteraction} onPointerUp={finishInteraction} onPointerCancel={finishInteraction} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }} onDrop={dropFromPalette}>
       <div ref={canvasRef} className="legacy-page-canvas" style={{ height: `${canvasHeight}px` }}>
         <div className="legacy-page-canvas-caption">ตัวอย่างหน้าเว็บ — ลากบล็อกได้</div>
         {PAGE_ELEMENT_IDS.map((id) => {
@@ -125,10 +142,11 @@ export default function PageLayoutEditor({ layouts, onChange, hiddenSections, on
     </div>
     <div className="legacy-element-controls"><div className="legacy-element-controls-heading"><span>กำลังแก้ไข</span><strong>{labels[selected].name}</strong><span className="legacy-element-size">{Math.round(selectedLayout.width)}%</span></div>
       <div className="legacy-element-layer-controls"><button type="button" onClick={() => changeLayer(-1)}>ส่งไปด้านหลัง</button><button type="button" onClick={() => changeLayer(1)}>นำมาด้านหน้า</button></div>
-      <label>แนวนอน <input type="range" min="0" max={Math.max(0, 100 - selectedLayout.width * (selectedLayout.scale ?? 1))} step="1" value={Math.round(selectedLayout.x)} onChange={(event) => updateSelected("x", Number(event.target.value))} /><output>{Math.round(selectedLayout.x)}%</output></label>
-      <label>แนวตั้ง <input type="range" min="0" max="7000" step="25" value={Math.round(selectedLayout.y)} onChange={(event) => updateSelected("y", Number(event.target.value))} /><output>{Math.round(selectedLayout.y)} px</output></label>
+      <label>แนวนอน <input type="range" min="0" max={Math.max(0, 100 - selectedLayout.width * (selectedLayout.scale ?? 1))} step="1" value={Math.round(selectedLayout.x)} onChange={(event) => updateSelected("x", Number(event.target.value))} /><input className="legacy-element-number" type="number" min="0" max={Math.max(0, 100 - selectedLayout.width * (selectedLayout.scale ?? 1))} step="1" value={Math.round(selectedLayout.x)} onChange={(event) => updateSelected("x", Number(event.target.value))} aria-label="ตำแหน่งแนวนอนเป็นเปอร์เซ็นต์" /></label>
+      <label>แนวตั้ง <input type="range" min="0" max="7000" step="25" value={Math.round(selectedLayout.y)} onChange={(event) => updateSelected("y", Number(event.target.value))} /><input className="legacy-element-number" type="number" min="0" max="8000" step="10" value={Math.round(selectedLayout.y)} onChange={(event) => updateSelected("y", Number(event.target.value))} aria-label="ตำแหน่งแนวตั้งเป็นพิกเซล" /></label>
       <label>ความกว้าง <input type="range" min="20" max={Math.max(20, (100 - selectedLayout.x) / (selectedLayout.scale ?? 1))} step="1" value={Math.round(selectedLayout.width)} onChange={(event) => updateSelected("width", Number(event.target.value))} /><output>{Math.round(selectedLayout.width)}%</output></label>
       <label>ขนาดรวม <input type="range" min="0.7" max="1.3" step="0.05" value={selectedLayout.scale ?? 1} onChange={(event) => updateSelected("scale", Number(event.target.value))} /><output>{Math.round((selectedLayout.scale ?? 1) * 100)}%</output></label>
+      <button type="button" className={`legacy-grid-snap ${snapToGrid ? "is-active" : ""}`} aria-pressed={snapToGrid} onClick={() => setSnapToGrid((value) => !value)}>{snapToGrid ? "ปิด" : "เปิด"} จัดตำแหน่งให้ตรงเส้นกริด</button>
     </div>
   </section>;
 }
