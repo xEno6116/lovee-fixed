@@ -25,6 +25,7 @@ import { decodeDataUrl, isAllowedMedia, isValidPin } from "../siteUtils";
 import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { ENV } from "../_core/env";
 import { sendMemoryLetter } from "../email";
+import { DESIGN_SECTION_IDS } from "../../shared/site-layout";
 
 const slugSchema = z.string().trim().min(SITE_SLUG_MIN_LENGTH, SITE_SLUG_MIN_LENGTH_MESSAGE).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
 const siteInput = z.object({ slug: slugSchema });
@@ -43,6 +44,8 @@ const settingsInput = z.object({
   letterRecipientEmail: z.string().email("กรุณาใส่อีเมลผู้รับให้ถูกต้อง").or(z.literal("")).optional(),
   layoutOrder: z.array(z.enum(["video", "message", "secret", "gallery", "letter"])).length(5).optional(),
   hiddenSections: z.array(z.enum(["video", "message", "secret", "gallery", "letter"])).optional(),
+  sectionWidths: z.object(Object.fromEntries(DESIGN_SECTION_IDS.map((id) => [id, z.number().int().min(3).max(12).optional()]))).partial().optional(),
+  musicPlayerLayout: z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(100), scale: z.number().min(0.7).max(1.3) }).optional(),
 });
 
 async function requireOwnedSite(ownerId: number, slug: string) {

@@ -61,6 +61,12 @@ describe("multi-site router", () => {
     expect(updateSiteSettings).toHaveBeenCalledWith(9, input);
   });
 
+  it("accepts saved visual widths and music player layout", async () => {
+    const caller = siteRouter.createCaller({ user: owner } as never);
+    const input = { slug: "main-memory", memoryMessage: "เทส", startDate: "2024-04-06", musicUrl: "", sectionWidths: { video: 6, message: 12 }, musicPlayerLayout: { x: 72, y: 84, scale: 1.15 } };
+    await expect(caller.admin.saveSettings(input)).resolves.toMatchObject({ sectionWidths: input.sectionWidths, musicPlayerLayout: input.musicPlayerLayout });
+  });
+
   it("deletes only a site belonging to the authenticated owner", async () => {
     const ownerCaller = siteRouter.createCaller({ user: owner } as never);
     const otherCaller = siteRouter.createCaller({ user: otherOwner } as never);

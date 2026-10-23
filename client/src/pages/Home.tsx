@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "wouter";
-import { ChevronLeft, ChevronRight, Mail, Pause, Play, Settings, Video } from "lucide-react";
+import { ChevronLeft, ChevronRight, Mail, Pause, Play, RotateCcw, Settings, Video, Volume2, VolumeX } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { DEFAULT_MUSIC_PLAYER_LAYOUT } from "@shared/site-layout";
 
 declare global {
   interface Window {
@@ -26,6 +27,13 @@ function ClockBox({ value, label }: { value: number; label: string }) {
   return <div className="legacy-clock-box"><strong>{value}</strong><span>{label}</span></div>;
 }
 
+function formatAudioTime(value: number) {
+  if (!Number.isFinite(value)) return "0:00";
+  const minutes = Math.floor(value / 60);
+  const seconds = Math.floor(value % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
+
 export default function Home({ slug }: { slug: string }) {
   const siteQuery = trpc.site.public.get.useQuery({ slug }, { staleTime: 60_000, gcTime: 10 * 60_000, refetchOnWindowFocus: false, refetchOnReconnect: false });
   const [pin, setPin] = useState("");
@@ -41,6 +49,11 @@ export default function Home({ slug }: { slug: string }) {
   const [videoIndex, setVideoIndex] = useState(0);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [audioTime, setAudioTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const [volume, setVolume] = useState(0.75);
+  const [muted, setMuted] = useState(false);
+  const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const [letterName, setLetterName] = useState("");
   const [letterEmail, setLetterEmail] = useState("");
   const [letterMessage, setLetterMessage] = useState("");
@@ -99,6 +112,17 @@ export default function Home({ slug }: { slug: string }) {
     return () => document.removeEventListener("visibilitychange", pauseWhenHidden);
   }, []);
 
+  useEffect(() => {
+    const resize = () => setViewportSize({ width: window.innerWidth, height: window.innerHeight });
+    resize();
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+
+  useEffect(() => {
+    if (audioRef.current) { audioRef.current.volume = volume; audioRef.current.muted = muted; }
+  }, [volume, muted, siteQuery.data?.settings.musicUrl]);
+
   const verifyPublicPin = async (candidate: string) => {
     if (verifying || candidate.length !== 4) return;
     setVerifying(true);
@@ -156,13 +180,22 @@ export default function Home({ slug }: { slug: string }) {
   const photos = site.images;
   const layoutOrder = site.settings.layoutOrder ?? ["video", "message", "secret", "gallery", "letter"];
   const hiddenSections = new Set(site.settings.hiddenSections ?? []);
-  const sectionStyle = (id: "video" | "message" | "secret" | "gallery" | "letter") => ({ order: layoutOrder.indexOf(id), display: hiddenSections.has(id) ? "none" : undefined });
+  const sectionWidths = site.settings.sectionWidths ?? {};
+  const sectionStyle = (id: "video" | "message" | "secret" | "gallery" | "letter") => ({ order: layoutOrder.indexOf(id), gridColumn: `span ${sectionWidths[id] ?? 12}`, display: hiddenSections.has(id) ? "none" : undefined });
+  const musicPlayerLayout = site.settings.musicPlayerLayout ?? DEFAULT_MUSIC_PLAYER_LAYOUT;
+  const playerScale = musicPlayerLayout.scale;
+  const viewportWidth = viewportSize.width || 360;
+  const viewportHeight = viewportSize.height || 720;
+  const playerWidth = Math.min(340, viewportWidth - 24) * playerScale;
+  const playerHeight = 154 * playerScale;
+  const playerLeft = Math.max(playerWidth / 2 + 12, Math.min(viewportWidth - playerWidth / 2 - 12, (musicPlayerLayout.x / 100) * viewportWidth));
+  const playerTop = Math.max(playerHeight / 2 + 12, Math.min(viewportHeight - playerHeight / 2 - 12, (musicPlayerLayout.y / 100) * viewportHeight));
   const themeBackground = { soft: "#fff5f7", sunset: "#fff7ed", night: "#0f172a", paper: "#fefce8" }[site.settings.backgroundStyle ?? "soft"];
   const themeFont = { gaegu: "'Gaegu', 'Noto Sans Thai', sans-serif", serif: "Georgia, 'Noto Serif Thai', serif", sans: "system-ui, 'Noto Sans Thai', sans-serif" }[site.settings.fontFamily ?? "gaegu"];
   const movePhoto = (direction: number) => { if (photos.length) setPhotoIndex((index) => (index + direction + photos.length) % photos.length); };
 
   return <div className="legacy-anniversary min-h-screen" style={{ backgroundColor: themeBackground, color: site.settings.themeMode === "night" ? "#f8fafc" : undefined, fontFamily: themeFont }}>
-    <audio ref={audioRef} src={site.settings.musicUrl || undefined} preload="none" loop onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} />
+    <audio ref={audioRef} src={site.settings.musicUrl || undefined} preload="metadata" loop onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} onTimeUpdate={(event) => setAudioTime(event.currentTarget.currentTime)} onLoadedMetadata={(event) => setAudioDuration(event.currentTarget.duration)} onDurationChange={(event) => setAudioDuration(event.currentTarget.duration)} />
     {!unlocked && <section className="legacy-lock-screen">
       <Link href={`/site/${slug}/settings`} className="legacy-settings-trigger" aria-label="Settings"><Settings size={20} /></Link>
       <div className="mb-10 text-center"><h2>{site.site.title}</h2><p className="legacy-lock-hint">ลิงก์นี้เป็นลิงก์ส่วนตัว กรุณากรอกรหัสผ่าน 4 หลักเพื่อเข้าชม</p></div>
@@ -181,6 +214,13 @@ export default function Home({ slug }: { slug: string }) {
       <section style={sectionStyle("letter")} className="legacy-section legacy-message-section"><div className="legacy-glass-card"><h3><Mail size={18} className="inline-block" /> เขียนจดหมายถึงเรา</h3><p className="legacy-section-hint">ฝากข้อความไว้ แล้วระบบจะส่งเข้าอีเมลเจ้าของเว็บไซต์</p><form className="mt-4 grid gap-3" onSubmit={sendLetter}><input required maxLength={80} value={letterName} onChange={(event) => setLetterName(event.target.value)} placeholder="ชื่อของคุณ" className="rounded-xl border border-pink-200 bg-white px-3 py-2.5" /><input type="email" value={letterEmail} onChange={(event) => setLetterEmail(event.target.value)} placeholder="อีเมลสำหรับตอบกลับ (ไม่บังคับ)" className="rounded-xl border border-pink-200 bg-white px-3 py-2.5" /><textarea required minLength={3} maxLength={5000} value={letterMessage} onChange={(event) => setLetterMessage(event.target.value)} placeholder="เขียนข้อความจากหัวใจ…" className="min-h-28 rounded-xl border border-pink-200 bg-white px-3 py-2.5" /><button type="submit" className="legacy-save-btn" disabled={sendLetterMutation.isPending}>{sendLetterMutation.isPending ? "กำลังส่ง…" : "ส่งจดหมาย"}</button></form>{letterStatus && <p className="legacy-lock-error mt-3" role="status">{letterStatus}</p>}</div></section>
       <footer className="legacy-footer">อยู่ด้วยกันตลอดไปนะ 💖🌷</footer>
     </main>}
-    {unlocked && <div className={`legacy-cd-player ${playing ? "playing" : ""}`}><div className="legacy-cd-case"><div className="legacy-cd-disc"><div className="legacy-cd-center" /></div></div><div><p className="legacy-cd-label">Our Song ❤️</p><button type="button" className="legacy-cd-button" onClick={toggleMusic} disabled={!site.settings.musicUrl} aria-label="เล่นหรือหยุดเพลง">{playing ? <Pause size={13} /> : <Play size={13} fill="currentColor" />}</button></div></div>}
+    {unlocked && <div className={`legacy-cd-player ${playing ? "playing" : ""}`} style={{ left: playerLeft, top: playerTop, right: "auto", bottom: "auto", transform: `translate(-50%, -50%) scale(${playerScale})` }}>
+      <div className="legacy-cd-case"><div className="legacy-cd-disc"><div className="legacy-cd-center" /></div></div>
+      <div className="legacy-music-player-content"><div className="legacy-music-player-heading"><div><span className="legacy-music-player-eyebrow">OUR SONG</span><p className="legacy-cd-label">A little piece of us ♡</p></div><button type="button" className="legacy-music-icon-btn" onClick={() => { if (audioRef.current) { audioRef.current.currentTime = 0; setAudioTime(0); } }} disabled={!site.settings.musicUrl} aria-label="เริ่มเพลงใหม่"><RotateCcw size={15} /></button></div>
+        <input className="legacy-music-seek" type="range" min="0" max={audioDuration || 0} step="0.1" value={Math.min(audioTime, audioDuration || 0)} disabled={!site.settings.musicUrl || !audioDuration} onChange={(event) => { const next = Number(event.target.value); setAudioTime(next); if (audioRef.current) audioRef.current.currentTime = next; }} aria-label="ตำแหน่งเพลง" />
+        <div className="legacy-music-time"><span>{formatAudioTime(audioTime)}</span><span>{formatAudioTime(audioDuration)}</span></div>
+        <div className="legacy-music-player-controls"><button type="button" className="legacy-cd-button" onClick={toggleMusic} disabled={!site.settings.musicUrl} aria-label={playing ? "หยุดเพลง" : "เล่นเพลง"}>{playing ? <Pause size={17} /> : <Play size={17} fill="currentColor" />}</button><div className="legacy-music-volume"><button type="button" className="legacy-music-icon-btn" onClick={() => setMuted((value) => !value)} aria-label={muted ? "เปิดเสียง" : "ปิดเสียง"}>{muted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}</button><input type="range" min="0" max="1" step="0.01" value={muted ? 0 : volume} onChange={(event) => { const next = Number(event.target.value); setVolume(next); setMuted(next === 0); }} aria-label="ระดับเสียง" /></div></div>
+      </div>
+    </div>}
   </div>;
 }

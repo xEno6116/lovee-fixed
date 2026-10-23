@@ -4,6 +4,7 @@ import { ENV } from "./_core/env";
 import { updateJson, readJson } from "./githubStorage";
 import { DEFAULT_PIN, hashPin, safeFileName } from "./siteUtils";
 import { storagePrepareUpload, storagePut } from "./storage";
+import type { MusicPlayerLayout, SectionWidths } from "../shared/site-layout";
 
 type MediaKind = "image" | "video" | "audio";
 
@@ -25,6 +26,8 @@ type StoredSettings = {
   letterRecipientEmail?: string;
   layoutOrder?: Array<"video" | "message" | "secret" | "gallery" | "letter">;
   hiddenSections?: Array<"video" | "message" | "secret" | "gallery" | "letter">;
+  sectionWidths?: SectionWidths;
+  musicPlayerLayout?: MusicPlayerLayout;
 };
 
 type StoredAsset = {
@@ -334,6 +337,8 @@ function toPublicSiteData(site: StoredSite, unlocked: boolean) {
       fontFamily: site.settings.fontFamily ?? "gaegu",
       layoutOrder: site.settings.layoutOrder ?? ["video", "message", "secret", "gallery", "letter"],
       hiddenSections: site.settings.hiddenSections ?? [],
+      sectionWidths: site.settings.sectionWidths ?? {},
+      musicPlayerLayout: site.settings.musicPlayerLayout ?? { x: 50, y: 86, scale: 1 },
     },
     locked,
     deletionAt: Number.isFinite(expiresAtMs) ? new Date(expiresAtMs + 3 * 86_400_000).toISOString() : null,
@@ -377,7 +382,7 @@ export async function verifySitePin(siteId: number, pin: string) {
   return Boolean(settings && settings.pinHash === hashPin(pin));
 }
 
-export async function updateSiteSettings(siteId: number, input: { memoryMessage: string; secretMessage?: string; startDate: string; pin?: string; musicUrl: string; expiresAt?: string | null; themeColor?: string; backgroundStyle?: StoredSettings["backgroundStyle"]; themeMode?: StoredSettings["themeMode"]; fontFamily?: StoredSettings["fontFamily"]; letterRecipientEmail?: string; layoutOrder?: StoredSettings["layoutOrder"]; hiddenSections?: StoredSettings["hiddenSections"] }) {
+export async function updateSiteSettings(siteId: number, input: { memoryMessage: string; secretMessage?: string; startDate: string; pin?: string; musicUrl: string; expiresAt?: string | null; themeColor?: string; backgroundStyle?: StoredSettings["backgroundStyle"]; themeMode?: StoredSettings["themeMode"]; fontFamily?: StoredSettings["fontFamily"]; letterRecipientEmail?: string; layoutOrder?: StoredSettings["layoutOrder"]; hiddenSections?: StoredSettings["hiddenSections"]; sectionWidths?: SectionWidths; musicPlayerLayout?: MusicPlayerLayout }) {
   return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update settings ${siteId}`, (repository) => {
     const site = getSite(repository, siteId);
     if (!site) throw new Error("ไม่พบเว็บไซต์สำหรับบันทึกการตั้งค่า");
@@ -395,6 +400,8 @@ export async function updateSiteSettings(siteId: number, input: { memoryMessage:
       ...(input.letterRecipientEmail !== undefined ? { letterRecipientEmail: input.letterRecipientEmail.trim() } : {}),
       ...(input.layoutOrder ? { layoutOrder: input.layoutOrder } : {}),
       ...(input.hiddenSections ? { hiddenSections: input.hiddenSections } : {}),
+      ...(input.sectionWidths ? { sectionWidths: input.sectionWidths } : {}),
+      ...(input.musicPlayerLayout ? { musicPlayerLayout: input.musicPlayerLayout } : {}),
       ...(input.expiresAt !== undefined ? { expiresAt: input.expiresAt } : {}),
       ...(input.pin ? { pinHash: hashPin(input.pin) } : {}),
       updatedAt: now,
