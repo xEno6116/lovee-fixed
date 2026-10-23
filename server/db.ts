@@ -23,6 +23,8 @@ type StoredSettings = {
   themeMode?: "light" | "night";
   fontFamily?: "gaegu" | "serif" | "sans";
   letterRecipientEmail?: string;
+  layoutOrder?: Array<"video" | "message" | "secret" | "gallery" | "letter">;
+  hiddenSections?: Array<"video" | "message" | "secret" | "gallery" | "letter">;
 };
 
 type StoredAsset = {
@@ -275,6 +277,8 @@ export async function createSiteForOwner(ownerId: number, input: { title: string
         backgroundStyle: "soft",
         themeMode: "light",
         fontFamily: "gaegu",
+        layoutOrder: ["video", "message", "secret", "gallery", "letter"],
+        hiddenSections: [],
       },
       assets: [],
     };
@@ -328,6 +332,8 @@ function toPublicSiteData(site: StoredSite, unlocked: boolean) {
       backgroundStyle: site.settings.backgroundStyle ?? "soft",
       themeMode: site.settings.themeMode ?? "light",
       fontFamily: site.settings.fontFamily ?? "gaegu",
+      layoutOrder: site.settings.layoutOrder ?? ["video", "message", "secret", "gallery", "letter"],
+      hiddenSections: site.settings.hiddenSections ?? [],
     },
     locked,
     deletionAt: Number.isFinite(expiresAtMs) ? new Date(expiresAtMs + 3 * 86_400_000).toISOString() : null,
@@ -371,7 +377,7 @@ export async function verifySitePin(siteId: number, pin: string) {
   return Boolean(settings && settings.pinHash === hashPin(pin));
 }
 
-export async function updateSiteSettings(siteId: number, input: { memoryMessage: string; secretMessage?: string; startDate: string; pin?: string; musicUrl: string; expiresAt?: string | null; themeColor?: string; backgroundStyle?: StoredSettings["backgroundStyle"]; themeMode?: StoredSettings["themeMode"]; fontFamily?: StoredSettings["fontFamily"]; letterRecipientEmail?: string }) {
+export async function updateSiteSettings(siteId: number, input: { memoryMessage: string; secretMessage?: string; startDate: string; pin?: string; musicUrl: string; expiresAt?: string | null; themeColor?: string; backgroundStyle?: StoredSettings["backgroundStyle"]; themeMode?: StoredSettings["themeMode"]; fontFamily?: StoredSettings["fontFamily"]; letterRecipientEmail?: string; layoutOrder?: StoredSettings["layoutOrder"]; hiddenSections?: StoredSettings["hiddenSections"] }) {
   return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: update settings ${siteId}`, (repository) => {
     const site = getSite(repository, siteId);
     if (!site) throw new Error("ไม่พบเว็บไซต์สำหรับบันทึกการตั้งค่า");
@@ -387,6 +393,8 @@ export async function updateSiteSettings(siteId: number, input: { memoryMessage:
       ...(input.themeMode ? { themeMode: input.themeMode } : {}),
       ...(input.fontFamily ? { fontFamily: input.fontFamily } : {}),
       ...(input.letterRecipientEmail !== undefined ? { letterRecipientEmail: input.letterRecipientEmail.trim() } : {}),
+      ...(input.layoutOrder ? { layoutOrder: input.layoutOrder } : {}),
+      ...(input.hiddenSections ? { hiddenSections: input.hiddenSections } : {}),
       ...(input.expiresAt !== undefined ? { expiresAt: input.expiresAt } : {}),
       ...(input.pin ? { pinHash: hashPin(input.pin) } : {}),
       updatedAt: now,

@@ -40,6 +40,8 @@ const settingsInput = z.object({
   themeMode: z.enum(["light", "night"]).optional(),
   fontFamily: z.enum(["gaegu", "serif", "sans"]).optional(),
   letterRecipientEmail: z.string().email("กรุณาใส่อีเมลผู้รับให้ถูกต้อง").or(z.literal("")).optional(),
+  layoutOrder: z.array(z.enum(["video", "message", "secret", "gallery", "letter"])).length(5).optional(),
+  hiddenSections: z.array(z.enum(["video", "message", "secret", "gallery", "letter"])).optional(),
 });
 
 async function requireOwnedSite(ownerId: number, slug: string) {
