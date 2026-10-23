@@ -23,6 +23,7 @@ export default function Settings({ slug }: { slug: string }) {
   const [fontFamily, setFontFamily] = useState<"gaegu" | "serif" | "sans">("gaegu");
   const [letterRecipientEmail, setLetterRecipientEmail] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [status, setStatus] = useState<{ tone: "success" | "error" | "info"; message: string } | null>(null);
   const invalidateSite = () => { void utils.site.admin.get.invalidate({ slug }); void utils.site.private.get.invalidate({ slug }); };
   const saveMutation = trpc.site.admin.saveSettings.useMutation({ onSuccess: () => { invalidateSite(); setPin(""); setStatus({ tone: "success", message: "บันทึกการตั้งค่าแล้ว" }); }, onError: (error) => setStatus({ tone: "error", message: `บันทึกไม่สำเร็จ: ${error.message}` }) });
@@ -39,16 +40,24 @@ export default function Settings({ slug }: { slug: string }) {
   const uploadFiles = async (kind: "image" | "video" | "audio", files: File[]) => {
     if (!files.length) return;
     if (kind === "video" && videos.length >= 4) { setStatus({ tone: "error", message: "อัปโหลดวิดีโอได้สูงสุด 4 ช่อง" }); return; }
-    setUploading(true); setStatus({ tone: "info", message: "กำลังเตรียมพื้นที่จัดเก็บไฟล์…" });
+    setUploading(true); setUploadProgress(0); setStatus({ tone: "info", message: "กำลังเตรียมพื้นที่จัดเก็บไฟล์…" });
     try {
-      for (const file of files) {
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index];
         const mimeType = file.type || "application/octet-stream";
         const plan = await prepareUploadMutation.mutateAsync({ slug, kind, fileName: file.name, mimeType });
-        const response = await fetch(plan.uploadUrl, { method: "PUT", headers: { "Content-Type": mimeType }, body: file });
-        if (!response.ok) throw new Error(`อัปโหลดไฟล์ไปยังพื้นที่จัดเก็บไม่สำเร็จ (${response.status})`);
+        await new Promise<void>((resolve, reject) => {
+          const request = new XMLHttpRequest();
+          request.open("PUT", plan.uploadUrl);
+          request.setRequestHeader("Content-Type", mimeType);
+          request.upload.onprogress = (event) => { if (event.lengthComputable) setUploadProgress(Math.round(((index + event.loaded / event.total) / files.length) * 100)); };
+          request.onload = () => request.status >= 200 && request.status < 300 ? resolve() : reject(new Error(`อัปโหลดไฟล์ไปยังพื้นที่จัดเก็บไม่สำเร็จ (${request.status})`));
+          request.onerror = () => reject(new Error("เชื่อมต่อ Cloud Storage ไม่สำเร็จ"));
+          request.send(file);
+        });
         await finalizeUploadMutation.mutateAsync({ slug, kind, fileName: file.name, mimeType, key: plan.key, url: plan.url });
       }
-      setStatus({ tone: "success", message: `อัปโหลดไฟล์ ${files[0].name} เรียบร้อยแล้ว` });
+      setUploadProgress(100); setStatus({ tone: "success", message: `อัปโหลดไฟล์ ${files.length > 1 ? `${files.length} ไฟล์` : files[0].name} เรียบร้อยแล้ว` });
     } catch (error) {
       setStatus({ tone: "error", message: `อัปโหลดไม่สำเร็จ: ${error instanceof Error ? error.message : "เกิดข้อผิดพลาด"}` });
     } finally { setUploading(false); }
@@ -62,7 +71,7 @@ export default function Settings({ slug }: { slug: string }) {
   if (adminQuery.error || !adminQuery.data) return <div className="legacy-admin-screen"><div className="legacy-admin-box text-center"><h3>ไม่พบเว็บไซต์นี้</h3><p className="legacy-admin-note">เว็บไซต์นี้เป็นของเจ้าของรายอื่น หรือไม่มีอยู่ในระบบ</p><Link className="legacy-close-btn mt-4 inline-block" href="/dashboard">กลับแดชบอร์ด</Link></div></div>;
 
   return <div className="legacy-admin-screen"><section className="legacy-admin-box"><div className="flex items-center justify-between gap-3"><h3>{adminQuery.data.site.title}</h3><Link className="legacy-close-btn" href={`/site/${slug}`}>ปิด</Link></div><div className="legacy-admin-stack">
-    {status && <p className={`legacy-status legacy-status-${status.tone}`} role="status">{status.message}</p>}
+    {status && <p className={`legacy-status legacy-status-${status.tone}`} role="status">{status.message}{uploading && <><span className="legacy-upload-progress-label"> {uploadProgress}%</span><span className="legacy-upload-progress"><span style={{ width: `${uploadProgress}%` }} /></span></>}</p>}
     <div><label>ช่องวิดีโอ (เลือกใส่ได้สูงสุด 4 ไฟล์)</label><div className="legacy-input-stack">{Array.from({ length: 4 }, (_, index) => { const current = videos[index]; return <div className="legacy-upload-row" key={index}>{current ? <><span className="truncate">วิดีโอ {index + 1}: {current.originalName}</span><button type="button" onClick={() => remove(current.id)} aria-label="ลบวิดีโอ"><Trash2 size={15} /></button></> : <input type="file" accept="video/*" className="legacy-file-input" disabled={uploading} onChange={onFiles("video")} aria-label={`วิดีโอที่ ${index + 1}`} />}</div>; })}</div><p className="legacy-admin-note">เลือกใส่ภายหลังได้ ไม่จำเป็นต้องมีครบทั้ง 4 ช่อง</p></div>
     <div><label>แกลเลอรี่ภาพ 📸 (เลือกหลายรูปได้)</label><input type="file" accept="image/*" multiple className="legacy-file-input" disabled={uploading} onChange={onFiles("image")} />{images.length ? <div className="legacy-media-list">{images.map((asset, index) => <div className="legacy-upload-row" key={asset.id}><span className="truncate">รูป {index + 1}: {asset.originalName}</span><button type="button" onClick={() => remove(asset.id)} aria-label={`ลบรูป ${index + 1}`}><Trash2 size={15} /></button></div>)}</div> : <p className="legacy-admin-note">ยังไม่มีรูปภาพ — เลือกไฟล์ใหม่ได้ทีละไฟล์</p>}</div>
     <div><label>เพลงรัก (ไฟล์เสียง, ทีละ 1 ไฟล์)</label><input type="file" accept="audio/*" className="legacy-file-input" disabled={uploading} onChange={onFiles("audio")} />{songs.length ? <div className="legacy-media-list">{songs.map((asset) => <div className="legacy-upload-row" key={asset.id}><span className="truncate">{asset.originalName}</span><button type="button" onClick={() => remove(asset.id)} aria-label={`ลบเพลง ${asset.originalName}`}><Trash2 size={15} /></button></div>)}</div> : <p className="legacy-admin-note">ยังไม่มีเพลง — เลือกไฟล์ใหม่ได้ทีละไฟล์</p>}</div>
