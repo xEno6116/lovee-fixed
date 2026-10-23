@@ -444,8 +444,8 @@ button, a { touch-action: manipulation; }
   .legacy-layout-editor .legacy-design-row { grid-template-columns: 30px minmax(0, 1fr) auto; gap: 8px; }
   .legacy-layout-editor .legacy-width-control { grid-column: 2 / 3; }
   .legacy-layout-editor .legacy-design-actions { grid-column: 3 / 4; grid-row: 1 / span 2; }
-  .legacy-layout-stack { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2rem 0; }
-  .legacy-layout-stack > .legacy-section { grid-column: 1 / -1!important; }
+  .legacy-layout-stack { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 2rem 0; }
+  .legacy-layout-stack > .legacy-section { grid-column: span var(--mobile-span, 12)!important; }
   .legacy-cd-player { right: auto; bottom: auto; left: auto; justify-content: flex-start; transform-origin: center; }
 }
 @media (max-width: 420px) {

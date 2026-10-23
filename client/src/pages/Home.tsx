@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { Link } from "wouter";
 import { ChevronLeft, ChevronRight, Mail, Pause, Play, RotateCcw, Settings, Video, Volume2, VolumeX } from "lucide-react";
 import { trpc } from "@/lib/trpc";
@@ -181,7 +181,7 @@ export default function Home({ slug }: { slug: string }) {
   const layoutOrder = site.settings.layoutOrder ?? ["video", "message", "secret", "gallery", "letter"];
   const hiddenSections = new Set(site.settings.hiddenSections ?? []);
   const sectionWidths = site.settings.sectionWidths ?? {};
-  const sectionStyle = (id: "video" | "message" | "secret" | "gallery" | "letter") => ({ order: layoutOrder.indexOf(id), gridColumn: `span ${sectionWidths[id] ?? 12}`, display: hiddenSections.has(id) ? "none" : undefined });
+  const sectionStyle = (id: "video" | "message" | "secret" | "gallery" | "letter") => { const width = sectionWidths[id] ?? 12; return { order: layoutOrder.indexOf(id), gridColumn: `span ${width}`, "--mobile-span": Math.round((width * 2) / 3 + 4), display: hiddenSections.has(id) ? "none" : undefined } as CSSProperties; };
   const musicPlayerLayout = site.settings.musicPlayerLayout ?? DEFAULT_MUSIC_PLAYER_LAYOUT;
   const playerScale = musicPlayerLayout.scale;
   const viewportWidth = viewportSize.width || 360;
