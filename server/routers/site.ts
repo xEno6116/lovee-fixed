@@ -25,10 +25,16 @@ import { decodeDataUrl, isAllowedMedia, isValidPin } from "../siteUtils";
 import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { ENV } from "../_core/env";
 import { sendMemoryLetter } from "../email";
-import { DESIGN_SECTION_IDS } from "../../shared/site-layout";
+import { DESIGN_SECTION_IDS, PAGE_ELEMENT_IDS } from "../../shared/site-layout";
 
 const slugSchema = z.string().trim().min(SITE_SLUG_MIN_LENGTH, SITE_SLUG_MIN_LENGTH_MESSAGE).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
 const siteInput = z.object({ slug: slugSchema });
+const pageElementLayoutSchema = z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(8000), width: z.number().min(20).max(100), zIndex: z.number().int().min(0).max(99).optional(), scale: z.number().min(0.7).max(1.3).optional() });
+const pageElementLayoutsSchema = z.object(Object.fromEntries(PAGE_ELEMENT_IDS.map((id) => [id, pageElementLayoutSchema.optional()]))).partial().superRefine((layouts, context) => {
+  for (const [id, layout] of Object.entries(layouts)) {
+    if (layout && layout.x + layout.width * (layout.scale ?? 1) > 100) context.addIssue({ code: z.ZodIssueCode.custom, path: [id, "x"], message: "ตำแหน่งและความกว้างต้องอยู่ในหน้าเว็บ" });
+  }
+});
 const settingsInput = z.object({
   slug: slugSchema,
   memoryMessage: z.string().trim().min(1).max(5000),
@@ -43,9 +49,10 @@ const settingsInput = z.object({
   fontFamily: z.enum(["gaegu", "serif", "sans"]).optional(),
   letterRecipientEmail: z.string().email("กรุณาใส่อีเมลผู้รับให้ถูกต้อง").or(z.literal("")).optional(),
   layoutOrder: z.array(z.enum(["video", "message", "secret", "gallery", "letter"])).length(5).optional(),
-  hiddenSections: z.array(z.enum(["video", "message", "secret", "gallery", "letter"])).optional(),
+  hiddenSections: z.array(z.enum(PAGE_ELEMENT_IDS)).optional(),
   sectionWidths: z.object(Object.fromEntries(DESIGN_SECTION_IDS.map((id) => [id, z.number().int().min(3).max(12).optional()]))).partial().optional(),
   musicPlayerLayout: z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(100), scale: z.number().min(0.7).max(1.3) }).optional(),
+  elementLayouts: pageElementLayoutsSchema.optional(),
 });
 
 async function requireOwnedSite(ownerId: number, slug: string) {

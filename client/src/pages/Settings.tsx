@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
 import { Link } from "wouter";
-import { ArrowDown, ArrowUp, Eye, EyeOff, GripVertical, Loader2, Music2, Trash2, Upload } from "lucide-react";
+import { Loader2, Music2, Trash2, Upload } from "lucide-react";
 import { startLogin } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
-import { DEFAULT_MUSIC_PLAYER_LAYOUT, DEFAULT_SECTION_WIDTHS, type DesignSectionId, type MusicPlayerLayout, type SectionWidths } from "@shared/site-layout";
+import PageLayoutEditor from "@/components/PageLayoutEditor";
+import { createDefaultPageElementLayouts, DEFAULT_MUSIC_PLAYER_LAYOUT, DEFAULT_SECTION_WIDTHS, normalizePageElementLayouts, type DesignSectionId, type MusicPlayerLayout, type PageElementId, type PageElementLayouts, type SectionWidths } from "@shared/site-layout";
 
 function readAsDataUrl(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("ไม่สามารถอ่านไฟล์ได้")); reader.readAsDataURL(file); }); }
 function toDateTimeLocal(value?: string | null) { return value ? new Date(value).toISOString().slice(0, 16) : ""; }
@@ -25,18 +26,11 @@ export default function Settings({ slug }: { slug: string }) {
   const [letterRecipientEmail, setLetterRecipientEmail] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const designSections = [
-    { id: "video" as const, label: "วิดีโอ", hint: "วิดีโอความทรงจำ" },
-    { id: "message" as const, label: "ข้อความหลัก", hint: "ข้อความความทรงจำ" },
-    { id: "secret" as const, label: "ข้อความลับ", hint: "แสดงหลังปลดล็อก" },
-    { id: "gallery" as const, label: "แกลเลอรีรูปภาพ", hint: "รูปภาพของเรา" },
-    { id: "letter" as const, label: "จดหมาย", hint: "ฟอร์มส่งจดหมาย" },
-  ];
-  const [layoutOrder, setLayoutOrder] = useState<Array<typeof designSections[number]["id"]>>(["video", "message", "secret", "gallery", "letter"]);
-  const [hiddenSections, setHiddenSections] = useState<Array<typeof designSections[number]["id"]>>([]);
+  const [layoutOrder, setLayoutOrder] = useState<DesignSectionId[]>(["video", "message", "secret", "gallery", "letter"]);
+  const [hiddenSections, setHiddenSections] = useState<PageElementId[]>([]);
   const [sectionWidths, setSectionWidths] = useState<SectionWidths>(DEFAULT_SECTION_WIDTHS);
+  const [elementLayouts, setElementLayouts] = useState<PageElementLayouts>(() => createDefaultPageElementLayouts());
   const [musicPlayerLayout, setMusicPlayerLayout] = useState<MusicPlayerLayout>(DEFAULT_MUSIC_PLAYER_LAYOUT);
-  const [draggedSection, setDraggedSection] = useState<DesignSectionId | null>(null);
   const playerCanvasRef = useRef<HTMLDivElement>(null);
   const activePlayerPointer = useRef<number | null>(null);
   const [status, setStatus] = useState<{ tone: "success" | "error" | "info"; message: string } | null>(null);
@@ -46,7 +40,7 @@ export default function Settings({ slug }: { slug: string }) {
   const finalizeUploadMutation = trpc.site.admin.finalizeUpload.useMutation({ onSuccess: invalidateSite });
   const removeMutation = trpc.site.admin.removeMedia.useMutation({ onSuccess: () => { invalidateSite(); setStatus({ tone: "success", message: "ลบไฟล์ออกจากรายการแล้ว" }); }, onError: (error) => setStatus({ tone: "error", message: `ลบไฟล์ไม่สำเร็จ: ${error.message}` }) });
 
-  useEffect(() => { const settings = adminQuery.data?.settings; if (settings) { setMemoryMessage(settings.memoryMessage); setSecretMessage(settings.secretMessage ?? ""); setStartDate(settings.startDate); setExpiresAt(toDateTimeLocal(settings.expiresAt)); setThemeColor(settings.themeColor ?? "#ec4899"); setBackgroundStyle(settings.backgroundStyle ?? "soft"); setThemeMode(settings.themeMode ?? "light"); setFontFamily(settings.fontFamily ?? "gaegu"); setLetterRecipientEmail(settings.letterRecipientEmail ?? ""); setLayoutOrder(settings.layoutOrder ?? ["video", "message", "secret", "gallery", "letter"]); setHiddenSections(settings.hiddenSections ?? []); setSectionWidths({ ...DEFAULT_SECTION_WIDTHS, ...settings.sectionWidths }); setMusicPlayerLayout(settings.musicPlayerLayout ?? DEFAULT_MUSIC_PLAYER_LAYOUT); } }, [adminQuery.data?.settings]);
+  useEffect(() => { const settings = adminQuery.data?.settings; if (settings) { const order = settings.layoutOrder ?? ["video", "message", "secret", "gallery", "letter"]; const widths = { ...DEFAULT_SECTION_WIDTHS, ...settings.sectionWidths }; const defaults = createDefaultPageElementLayouts(order, widths); setMemoryMessage(settings.memoryMessage); setSecretMessage(settings.secretMessage ?? ""); setStartDate(settings.startDate); setExpiresAt(toDateTimeLocal(settings.expiresAt)); setThemeColor(settings.themeColor ?? "#ec4899"); setBackgroundStyle(settings.backgroundStyle ?? "soft"); setThemeMode(settings.themeMode ?? "light"); setFontFamily(settings.fontFamily ?? "gaegu"); setLetterRecipientEmail(settings.letterRecipientEmail ?? ""); setLayoutOrder(order); setHiddenSections(settings.hiddenSections ?? []); setSectionWidths(widths); setElementLayouts(normalizePageElementLayouts(defaults, settings.elementLayouts)); setMusicPlayerLayout(settings.musicPlayerLayout ?? DEFAULT_MUSIC_PLAYER_LAYOUT); } }, [adminQuery.data?.settings]);
   const assets = adminQuery.data?.assets ?? [];
   const videos = useMemo(() => assets.filter((asset) => asset.kind === "video"), [assets]);
   const images = useMemo(() => assets.filter((asset) => asset.kind === "image"), [assets]);
@@ -78,11 +72,8 @@ export default function Settings({ slug }: { slug: string }) {
     } finally { setUploading(false); }
   };
   const onFiles = (kind: "image" | "video" | "audio") => async (event: ChangeEvent<HTMLInputElement>) => { try { const files = Array.from(event.target.files ?? []); if (files.length) await uploadFiles(kind, files); } finally { event.target.value = ""; } };
-  const reorderSection = (source: DesignSectionId, target: DesignSectionId) => { setLayoutOrder((current) => { const from = current.indexOf(source); const to = current.indexOf(target); if (from < 0 || to < 0 || from === to) return current; const next = [...current]; next.splice(from, 1); next.splice(to, 0, source); return next; }); };
-  const placeSection = (source: DesignSectionId, target: DesignSectionId, after: boolean) => { setLayoutOrder((current) => { const from = current.indexOf(source); const to = current.indexOf(target); if (from < 0 || to < 0 || source === target) return current; const next = [...current]; next.splice(from, 1); const targetIndex = next.indexOf(target); next.splice(targetIndex + (after ? 1 : 0), 0, source); return next; }); };
-  const moveSection = (id: DesignSectionId, direction: -1 | 1) => { const index = layoutOrder.indexOf(id); const next = layoutOrder[index + direction]; if (next) reorderSection(id, next); };
   const movePlayer = (event: PointerEvent<HTMLButtonElement>) => { if (activePlayerPointer.current !== event.pointerId || !playerCanvasRef.current) return; const rect = playerCanvasRef.current.getBoundingClientRect(); setMusicPlayerLayout((current) => ({ ...current, x: Math.max(12, Math.min(88, ((event.clientX - rect.left) / rect.width) * 100)), y: Math.max(12, Math.min(88, ((event.clientY - rect.top) / rect.height) * 100)) })); };
-  const save = () => { const musicUrl = adminQuery.data?.settings.musicUrl ?? ""; setStatus({ tone: "info", message: "กำลังบันทึกการตั้งค่า…" }); saveMutation.mutate({ slug, memoryMessage, secretMessage, startDate, pin: pin || undefined, musicUrl, expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null, themeColor, backgroundStyle, themeMode, fontFamily, letterRecipientEmail, layoutOrder, hiddenSections, sectionWidths, musicPlayerLayout }); };
+  const save = () => { const musicUrl = adminQuery.data?.settings.musicUrl ?? ""; setStatus({ tone: "info", message: "กำลังบันทึกการตั้งค่า…" }); saveMutation.mutate({ slug, memoryMessage, secretMessage, startDate, pin: pin || undefined, musicUrl, expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null, themeColor, backgroundStyle, themeMode, fontFamily, letterRecipientEmail, layoutOrder, hiddenSections, sectionWidths, musicPlayerLayout, elementLayouts }); };
   const remove = (id: number) => removeMutation.mutate({ slug, id });
 
   if (loading || (isAuthenticated && adminQuery.isLoading)) return <div className="legacy-admin-screen"><div className="legacy-admin-box text-center"><Loader2 className="mx-auto animate-spin text-pink-500" /></div></div>;
@@ -92,15 +83,8 @@ export default function Settings({ slug }: { slug: string }) {
   return <div className="legacy-admin-screen"><section className="legacy-admin-box"><div className="flex items-center justify-between gap-3"><h3>{adminQuery.data.site.title}</h3><Link className="legacy-close-btn" href={`/site/${slug}`}>ปิด</Link></div><div className="legacy-admin-stack">
     {status && <p className={`legacy-status legacy-status-${status.tone}`} role="status">{status.message}{uploading && <><span className="legacy-upload-progress-label"> {uploadProgress}%</span><span className="legacy-upload-progress"><span style={{ width: `${uploadProgress}%` }} /></span></>}</p>}
     <div className="legacy-design-card legacy-layout-editor">
-      <div className="legacy-design-heading"><div><h4>จัดวางหน้าเว็บ 🎨</h4><p className="legacy-admin-note">ลากปุ่มจุดเพื่อย้ายส่วนต่าง ๆ ปรับความกว้างได้ แล้วกดบันทึก</p></div><Link className="legacy-close-btn" href={`/site/${slug}`}>ดูตัวอย่าง</Link></div>
-      <div className="legacy-design-list" onPointerMove={(event) => { if (!draggedSection) return; const targetRow = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-layout-section]"); const target = targetRow?.dataset.layoutSection as DesignSectionId | undefined; if (target && targetRow && target !== draggedSection) placeSection(draggedSection, target, event.clientY > targetRow.getBoundingClientRect().top + targetRow.getBoundingClientRect().height / 2); }}>
-        {layoutOrder.map((id, index) => { const section = designSections.find((item) => item.id === id)!; const hidden = hiddenSections.includes(id); const width = sectionWidths[id] ?? 12; return <div className={`legacy-design-row ${hidden ? "is-hidden" : ""} ${draggedSection === id ? "is-dragging" : ""}`} data-layout-section={id} key={id}>
-          <button type="button" className="legacy-drag-handle" aria-label={`ลากเพื่อย้าย${section.label}`} onPointerDown={(event) => { event.preventDefault(); setDraggedSection(id); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerUp={() => setDraggedSection(null)} onPointerCancel={() => setDraggedSection(null)}><GripVertical size={18} /></button>
-          <div className="legacy-design-name"><strong>{index + 1}. {section.label}</strong><span>{section.hint}</span></div>
-          <label className="legacy-width-control">ขนาด <input type="range" min="3" max="12" step="3" value={width} aria-label={`ปรับความกว้าง${section.label}`} onChange={(event) => setSectionWidths((current) => ({ ...current, [id]: Number(event.target.value) }))} /><output>{Math.round(width / 12 * 100)}%</output></label>
-          <div className="legacy-design-actions"><button type="button" onClick={() => moveSection(id, -1)} disabled={index === 0} aria-label={`เลื่อน${section.label}ขึ้น`}><ArrowUp size={15} /></button><button type="button" onClick={() => moveSection(id, 1)} disabled={index === layoutOrder.length - 1} aria-label={`เลื่อน${section.label}ลง`}><ArrowDown size={15} /></button><button type="button" onClick={() => setHiddenSections((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id])} aria-label={hidden ? `แสดง${section.label}` : `ซ่อน${section.label}`}>{hidden ? <EyeOff size={15} /> : <Eye size={15} />}</button></div>
-        </div>; })}
-      </div>
+      <div className="legacy-design-heading"><div><h4>จัดวางหน้าเว็บ 🎨</h4><p className="legacy-admin-note">ลากย้ายและปรับขนาดหัวเว็บกับทุกส่วนบนหน้าเว็บได้ แล้วกดบันทึก</p></div><Link className="legacy-close-btn" href={`/site/${slug}`}>ดูตัวอย่าง</Link></div>
+      <PageLayoutEditor layouts={elementLayouts} onChange={setElementLayouts} hiddenSections={hiddenSections} onHiddenSectionsChange={setHiddenSections} />
       <div className="legacy-player-editor"><div><h4><Music2 size={17} /> วางเครื่องเล่นเพลง</h4><p>ลากเครื่องเล่นไปยังตำแหน่งที่ต้องการ แล้วปรับขนาดได้</p></div>
         <div ref={playerCanvasRef} className="legacy-player-canvas">
           <div className="legacy-player-canvas-label">ตัวอย่างหน้าเว็บ</div>
