@@ -48,6 +48,12 @@ describe("multi-site router", () => {
     expect(createSiteForOwner).toHaveBeenCalledWith(2, { title: "เว็บใหม่", slug: "new-memory" });
   });
 
+  it("returns a Thai validation message when the site name is too short", async () => {
+    const caller = siteRouter.createCaller({ user: otherOwner } as never);
+    await expect(caller.dashboard.create({ title: "เว็บใหม่", slug: "ab" })).rejects.toThrow("กรุณาใส่ชื่อเว็บไซต์อย่างน้อย 3 ตัวอักษร");
+    expect(createSiteForOwner).not.toHaveBeenCalledWith(2, { title: "เว็บใหม่", slug: "ab" });
+  });
+
   it("saves settings only after resolving the site to its owner", async () => {
     const caller = siteRouter.createCaller({ user: owner } as never);
     const input = { slug: "main-memory", memoryMessage: "บันทึกใหม่", startDate: "2024-04-06", pin: "0000", musicUrl: "" };

@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { SITE_SLUG_MIN_LENGTH, SITE_SLUG_MIN_LENGTH_MESSAGE } from "@shared/const";
 import {
   createMediaAsset,
   createSiteForOwner,
@@ -25,7 +26,7 @@ import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { ENV } from "../_core/env";
 import { sendMemoryLetter } from "../email";
 
-const slugSchema = z.string().trim().min(3).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
+const slugSchema = z.string().trim().min(SITE_SLUG_MIN_LENGTH, SITE_SLUG_MIN_LENGTH_MESSAGE).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลางเท่านั้น");
 const siteInput = z.object({ slug: slugSchema });
 const settingsInput = z.object({
   slug: slugSchema,

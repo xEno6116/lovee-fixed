@@ -3,6 +3,8 @@ export const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
 export const AXIOS_TIMEOUT_MS = 30_000;
 export const UNAUTHED_ERR_MSG = 'Please login (10001)';
 export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
+export const SITE_SLUG_MIN_LENGTH = 3;
+export const SITE_SLUG_MIN_LENGTH_MESSAGE = "กรุณาใส่ชื่อเว็บไซต์อย่างน้อย 3 ตัวอักษร";
 
 // One-time nonce cookie that binds an OAuth login to the browser that started
 // it. The `__Host-` prefix forces the cookie host-only (Secure, Path=/, no
