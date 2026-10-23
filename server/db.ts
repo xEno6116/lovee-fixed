@@ -71,6 +71,9 @@ type StoredUser = {
   updatedAt: string;
   lastSignedIn: string;
   passwordHash?: string;
+  emailVerifiedAt?: string | null;
+  verificationTokenHash?: string | null;
+  verificationTokenExpiresAt?: string | null;
 };
 
 type UserRepository = {
@@ -137,7 +140,7 @@ export async function getLocalUserByEmail(email: string): Promise<StoredUser | u
   return data.users.find((item) => item.email?.toLowerCase() === normalized && item.loginMethod === "local-password");
 }
 
-export async function createLocalUser(input: { email: string; name: string; passwordHash: string }): Promise<StoredUser> {
+export async function createLocalUser(input: { email: string; name: string; passwordHash: string; verificationTokenHash: string; verificationTokenExpiresAt: string }): Promise<StoredUser> {
   const normalizedEmail = input.email.trim().toLowerCase();
   const openId = `local_${nanoid(24)}`;
   return updateJson(USER_DATA_PATH, emptyUserRepository, `anniversary: register local user ${normalizedEmail}`, (repository) => {
@@ -156,9 +159,35 @@ export async function createLocalUser(input: { email: string; name: string; pass
       updatedAt: now,
       lastSignedIn: now,
       passwordHash: input.passwordHash,
+      emailVerifiedAt: null,
+      verificationTokenHash: input.verificationTokenHash,
+      verificationTokenExpiresAt: input.verificationTokenExpiresAt,
     };
     repository.users.push(user);
     return { data: repository, result: user };
+  });
+}
+
+export async function markLocalEmailVerified(tokenHash: string): Promise<boolean> {
+  return updateJson(USER_DATA_PATH, emptyUserRepository, "anniversary: verify local email", (repository) => {
+    const user = repository.users.find((item) => item.loginMethod === "local-password" && item.verificationTokenHash === tokenHash);
+    if (!user || !user.verificationTokenExpiresAt || new Date(user.verificationTokenExpiresAt).getTime() < Date.now()) return { data: repository, result: false };
+    user.emailVerifiedAt = new Date().toISOString();
+    user.verificationTokenHash = null;
+    user.verificationTokenExpiresAt = null;
+    user.updatedAt = new Date().toISOString();
+    return { data: repository, result: true };
+  });
+}
+
+export async function updateLocalVerification(email: string, tokenHash: string, expiresAt: string): Promise<boolean> {
+  return updateJson(USER_DATA_PATH, emptyUserRepository, `anniversary: resend email verification ${email}`, (repository) => {
+    const user = repository.users.find((item) => item.loginMethod === "local-password" && item.email?.toLowerCase() === email.trim().toLowerCase());
+    if (!user || user.emailVerifiedAt) return { data: repository, result: false };
+    user.verificationTokenHash = tokenHash;
+    user.verificationTokenExpiresAt = expiresAt;
+    user.updatedAt = new Date().toISOString();
+    return { data: repository, result: true };
   });
 }
 

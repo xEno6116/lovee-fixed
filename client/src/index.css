@@ -256,3 +256,11 @@
   .legacy-admin-actions { flex-direction: column; }
   .legacy-admin-actions > * { width: 100%; }
 }
+
+.legacy-verification-box { margin-top: 18px; border: 1px solid #fbcfe8; border-radius: 16px; background: #fff1f2; padding: 14px; text-align: left; color: #9d174d; }
+.legacy-verification-box strong { display: block; color: #be185d; font-size: 1.05rem; }
+.legacy-verification-box p { margin: 6px 0 10px; font-size: .85rem; line-height: 1.5; }
+.legacy-verification-box button { width: 100%; border-radius: 10px; background: #ec4899; padding: 10px; color: white; font-weight: 700; }
+.legacy-verification-box button:disabled { opacity: .6; }
+.legacy-verification-box small { display: block; margin-top: 9px; color: #be185d; font-size: .75rem; line-height: 1.45; }
+.legacy-verification-success { margin-top: 16px; border-radius: 12px; background: #ecfdf5; padding: 10px; color: #047857; font-size: .85rem; line-height: 1.5; }

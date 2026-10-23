@@ -5,13 +5,17 @@ import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
 import { ENV } from "./env";
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { sendVerificationEmail } from "../email";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
   return typeof value === "string" ? value : undefined;
 }
 function hashPassword(password: string, salt = randomBytes(16).toString("hex")) { return `${salt}:${scryptSync(password, salt, 64).toString("hex")}`; }
+function hashToken(token: string) { return createHash("sha256").update(token).digest("hex"); }
+function verificationUrl(req: Request, token: string) { const origin = typeof req.headers.origin === "string" ? req.headers.origin : `https://${req.headers.host || "loveoffice-memory-fixed.vercel.app"}`; return `${origin}/dashboard?verify=${encodeURIComponent(token)}`; }
+function newVerificationToken() { return randomBytes(32).toString("hex"); }
 function verifyPassword(password: string, stored: string) {
   const [salt, expectedHex] = stored.split(":");
   if (!salt || !expectedHex) return false;
@@ -41,8 +45,10 @@ export function registerOAuthRoutes(app: Express) {
     if (validationError) { res.status(400).json({ error: validationError }); return; }
     if (name.length < 2 || name.length > 80) { res.status(400).json({ error: "กรุณากรอกชื่อ 2-80 ตัวอักษร" }); return; }
     try {
-      const user = await db.createLocalUser({ email, name, passwordHash: hashPassword(password) });
-      await createLocalSession(req, res, user);
+      const token = newVerificationToken();
+      const user = await db.createLocalUser({ email, name, passwordHash: hashPassword(password), verificationTokenHash: hashToken(token), verificationTokenExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() });
+      await sendVerificationEmail({ to: email, name, verificationUrl: verificationUrl(req, token) });
+      res.json({ ok: true, requiresVerification: true, email });
     } catch (error) {
       const message = error instanceof Error ? error.message : "สมัครสมาชิกไม่สำเร็จ";
       res.status(message.includes("มีบัญชี") ? 409 : 500).json({ error: message });
@@ -54,7 +60,29 @@ export function registerOAuthRoutes(app: Express) {
     if (!email || !password) { res.status(400).json({ error: "กรุณากรอกอีเมลและรหัสผ่าน" }); return; }
     const user = await db.getLocalUserByEmail(email);
     if (!user?.passwordHash || !verifyPassword(password, user.passwordHash)) { res.status(401).json({ error: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" }); return; }
+    if (!user.emailVerifiedAt) { res.status(403).json({ error: "กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ", code: "EMAIL_NOT_VERIFIED" }); return; }
     await createLocalSession(req, res, user);
+  });
+
+  app.post("/api/local-resend-verification", async (req: Request, res: Response) => {
+    const { email, password } = readCredentials(req);
+    const user = await db.getLocalUserByEmail(email);
+    if (!user?.passwordHash || !verifyPassword(password, user.passwordHash)) { res.status(401).json({ error: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" }); return; }
+    if (user.emailVerifiedAt) { res.json({ ok: true, alreadyVerified: true }); return; }
+    try {
+      const token = newVerificationToken();
+      await db.updateLocalVerification(email, hashToken(token), new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString());
+      await sendVerificationEmail({ to: email, name: user.name || "เพื่อน", verificationUrl: verificationUrl(req, token) });
+      res.json({ ok: true });
+    } catch (error) { console.error("[EmailVerification] Resend failed", error); res.status(500).json({ error: "ส่งอีเมลยืนยันไม่สำเร็จ" }); }
+  });
+
+  app.get("/api/verify-email", async (req: Request, res: Response) => {
+    const token = getQueryParam(req, "token");
+    if (!token || token.length < 32) { res.status(400).json({ error: "ลิงก์ยืนยันไม่ถูกต้อง" }); return; }
+    const verified = await db.markLocalEmailVerified(hashToken(token));
+    if (!verified) { res.status(400).json({ error: "ลิงก์ยืนยันหมดอายุหรือถูกใช้ไปแล้ว" }); return; }
+    res.json({ ok: true });
   });
 
   app.post("/api/owner-login", async (req: Request, res: Response) => {
