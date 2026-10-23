@@ -199,8 +199,8 @@ export default function Home({ slug }: { slug: string }) {
 
   return <div className="legacy-anniversary min-h-screen" style={{ backgroundColor: themeBackground, color: site.settings.themeMode === "night" ? "#f8fafc" : undefined, fontFamily: themeFont }}>
     <audio ref={audioRef} src={site.settings.musicUrl || undefined} preload="metadata" loop onPause={() => setPlaying(false)} onPlay={() => setPlaying(true)} onTimeUpdate={(event) => setAudioTime(event.currentTarget.currentTime)} onLoadedMetadata={(event) => setAudioDuration(event.currentTarget.duration)} onDurationChange={(event) => setAudioDuration(event.currentTarget.duration)} />
+    <Link href={`/site/${slug}/settings`} className="legacy-owner-toolbar"><Settings size={16} /><span>จัดการเว็บไซต์</span></Link>
     {!unlocked && <section className="legacy-lock-screen">
-      <Link href={`/site/${slug}/settings`} className="legacy-settings-trigger" aria-label="Settings"><Settings size={20} /></Link>
       <div className="mb-10 text-center"><h2>{site.site.title}</h2><p className="legacy-lock-hint">ลิงก์นี้เป็นลิงก์ส่วนตัว กรุณากรอกรหัสผ่าน 4 หลักเพื่อเข้าชม</p></div>
       <div ref={captchaRef} className="flex justify-center mb-5" aria-label="ยืนยันว่าไม่ใช่บอท" />
       <div className="legacy-dots" aria-label="รหัสผ่าน progress">{Array.from({ length: 4 }, (_, index) => <span key={index} className={index < pin.length ? "active" : ""} />)}</div>
