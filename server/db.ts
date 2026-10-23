@@ -58,6 +58,7 @@ type SiteRepository = {
 
 const SITE_DATA_PATH = "data/sites.json";
 const USER_DATA_PATH = "data/users.json";
+export const FREE_SITE_LIMIT = 1;
 
 type StoredUser = {
   id: number;
@@ -183,6 +184,9 @@ export async function getOwnedSiteBySlug(ownerId: number, slug: string) {
 
 export async function createSiteForOwner(ownerId: number, input: { title: string; slug: string }) {
   return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: create ${input.slug}`, (repository) => {
+    if (repository.sites.filter((site) => site.ownerId === ownerId).length >= FREE_SITE_LIMIT) {
+      throw new Error("owner site limit reached");
+    }
     if (repository.sites.some((site) => site.slug === input.slug)) {
       throw new Error("duplicate site slug");
     }

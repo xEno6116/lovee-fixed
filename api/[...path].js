@@ -397,6 +397,7 @@ async function storagePut(relKey, data, contentType = "application/octet-stream"
 // server/db.ts
 var SITE_DATA_PATH = "data/sites.json";
 var USER_DATA_PATH = "data/users.json";
+var FREE_SITE_LIMIT = 1;
 function emptyRepository() {
   return { version: 1, nextSiteId: 1, nextSettingsId: 1, nextAssetId: 1, sites: [] };
 }
@@ -479,6 +480,9 @@ async function getOwnedSiteBySlug(ownerId, slug) {
 }
 async function createSiteForOwner(ownerId, input) {
   return updateJson(SITE_DATA_PATH, emptyRepository, `anniversary: create ${input.slug}`, (repository) => {
+    if (repository.sites.filter((site2) => site2.ownerId === ownerId).length >= FREE_SITE_LIMIT) {
+      throw new Error("owner site limit reached");
+    }
     if (repository.sites.some((site2) => site2.slug === input.slug)) {
       throw new Error("duplicate site slug");
     }
@@ -818,6 +822,9 @@ var siteRouter = router({
       try {
         return await createSiteForOwner(ctx.user.id, input);
       } catch (error) {
+        if (error instanceof Error && /owner site limit/i.test(error.message)) {
+          throw new TRPCError3({ code: "FORBIDDEN", message: "\u0E1A\u0E31\u0E0D\u0E0A\u0E35\u0E19\u0E35\u0E49\u0E21\u0E35\u0E40\u0E27\u0E47\u0E1A\u0E44\u0E0B\u0E15\u0E4C\u0E1F\u0E23\u0E35\u0E04\u0E23\u0E1A 1 \u0E40\u0E27\u0E47\u0E1A\u0E41\u0E25\u0E49\u0E27" });
+        }
         if (error instanceof Error && /duplicate|unique/i.test(error.message)) {
           throw new TRPCError3({ code: "CONFLICT", message: "\u0E0A\u0E37\u0E48\u0E2D\u0E25\u0E34\u0E07\u0E01\u0E4C\u0E19\u0E35\u0E49\u0E16\u0E39\u0E01\u0E43\u0E0A\u0E49\u0E07\u0E32\u0E19\u0E41\u0E25\u0E49\u0E27 \u0E01\u0E23\u0E38\u0E13\u0E32\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E0A\u0E37\u0E48\u0E2D\u0E43\u0E2B\u0E21\u0E48" });
         }

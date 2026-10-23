@@ -53,3 +53,9 @@
 - เพิ่มการเลือกอัปโหลดรูปหลายไฟล์ในครั้งเดียว เพื่อลดจำนวนคลิกในการสร้างแกลเลอรี
 - เพิ่มฟอร์มจดหมายบนหน้า public และส่งผ่าน Resend ฝั่ง server โดยเก็บคีย์ไว้ใน environment เท่านั้น
 - เพิ่มอีเมลผู้รับในหน้า Settings โดยไม่นำค่าอีเมลออกไปใน public response
+
+## Free one-site access
+- ใช้ OAuth เดิมเป็นทั้ง Login และ Register โดยการล็อกอินครั้งแรกจะสร้าง user อัตโนมัติผ่าน `upsertUser`
+- แสดงแท็บ Login/Register บนหน้า Dashboard เพื่อสื่อสาร UX โดยไม่เพิ่มระบบเก็บ password ใหม่
+- บังคับโควตา `FREE_SITE_LIMIT = 1` ใน `createSiteForOwner` ฝั่ง server และใช้ optimistic concurrency ของ GitHub JSON กันคำขอพร้อมกัน
+- คง tenant boundary ด้วย `ownerId` ในทุก protected site query/mutation

@@ -262,3 +262,12 @@ a { color: inherit; text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   .memory-letter-form input, .memory-letter-form textarea { transition: none; }
 }
+
+/* Free one-site onboarding */
+.cosmic-auth-tabs { position: relative; z-index: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 24px; border: 1px solid rgba(196,210,255,.15); border-radius: 13px; padding: 4px; background: rgba(6,8,30,.28); }
+.cosmic-auth-tabs button { border: 0; border-radius: 10px; padding: 10px 12px; background: transparent; color: #9da9d0; font-size: .82rem; font-weight: 700; cursor: pointer; transition: .2s ease; }
+.cosmic-auth-tabs button.is-active { background: rgba(139,92,246,.28); color: #f8fbff; box-shadow: inset 0 1px rgba(255,255,255,.12); }
+.cosmic-limit-note { display: flex; align-items: center; gap: 8px; margin: 13px 0 0; border: 1px solid rgba(103,232,249,.22); border-radius: 12px; padding: 11px 13px; background: rgba(8,145,178,.11); color: #c7f6fc; font-size: .82rem; line-height: 1.5; }
+.cosmic-create-panel.is-limit-reached { border-color: rgba(103,232,249,.24); }
+.cosmic-create-panel.is-limit-reached .cosmic-create-form { opacity: .7; }
+@media (prefers-reduced-motion: reduce) { .cosmic-auth-tabs button { transition: none; } }

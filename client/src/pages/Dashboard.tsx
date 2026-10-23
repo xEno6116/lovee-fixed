@@ -32,6 +32,7 @@ export default function Dashboard() {
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [error, setError] = useState("");
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [ownerPassword, setOwnerPassword] = useState("");
   const [ownerLoginPending, setOwnerLoginPending] = useState(false);
 
@@ -93,9 +94,10 @@ export default function Dashboard() {
   if (!isAuthenticated) {
     return <div className="cosmic-app-shell cosmic-login-shell"><CosmicBackdrop /><main className="cosmic-login-card">
       <div className="cosmic-login-topline"><BrandMark /><span className="cosmic-secure-label"><ShieldCheck size={14} /> Private space</span></div>
-      <div className="cosmic-login-copy"><span className="cosmic-eyebrow"><Sparkles size={15} /> MEMORY CONSTELLATION</span><h1>เก็บทุกความทรงจำ<br />ไว้ในจักรวาลของคุณ</h1><p>เข้าสู่พื้นที่ส่วนตัว เพื่อสร้างและดูแลเว็บไซต์ความทรงจำของคุณ</p></div>
+      <div className="cosmic-login-copy"><span className="cosmic-eyebrow"><Sparkles size={15} /> MEMORY CONSTELLATION</span><h1>{authMode === "login" ? <>กลับเข้าสู่<br />จักรวาลของคุณ</> : <>สร้างพื้นที่<br />ความทรงจำของคุณ</>}</h1><p>{authMode === "login" ? "เข้าสู่พื้นที่ส่วนตัว เพื่อดูแลเว็บไซต์ความทรงจำของคุณ" : "สมัครฟรีด้วยบัญชีของคุณ แล้วสร้างเว็บไซต์ความทรงจำได้ 1 เว็บ"}</p></div>
+      <div className="cosmic-auth-tabs" role="tablist" aria-label="การเข้าสู่ระบบ"><button type="button" className={authMode === "login" ? "is-active" : ""} onClick={() => setAuthMode("login")} role="tab" aria-selected={authMode === "login"}>เข้าสู่ระบบ</button><button type="button" className={authMode === "register" ? "is-active" : ""} onClick={() => setAuthMode("register")} role="tab" aria-selected={authMode === "register"}>สมัครใช้งานฟรี</button></div>
       {import.meta.env.VITE_OAUTH_PORTAL_URL && import.meta.env.VITE_APP_ID ? (
-        <button className="cosmic-primary-button cosmic-login-button" onClick={() => { const message = startLogin(); if (message) setError(message); }}><ArrowUpRight size={18} />เข้าสู่ระบบ</button>
+        <button className="cosmic-primary-button cosmic-login-button" onClick={() => { const message = startLogin(); if (message) setError(message); }}><ArrowUpRight size={18} />{authMode === "login" ? "เข้าสู่ระบบด้วยบัญชีของฉัน" : "สมัครด้วยบัญชีของฉัน"}</button>
       ) : (
         <form className="cosmic-login-form" onSubmit={loginWithOwnerPassword}>
           <label htmlFor="owner-password">รหัสเจ้าของ</label>
@@ -104,7 +106,7 @@ export default function Dashboard() {
         </form>
       )}
       {error && <p className="cosmic-status cosmic-status-error" role="alert">{error}</p>}
-      <p className="cosmic-login-note">เฉพาะเจ้าของเท่านั้นที่เข้าถึงข้อมูลและสื่อของเว็บไซต์ได้</p>
+      <p className="cosmic-login-note">ข้อมูลแยกตามบัญชีของคุณ · ฟรี 1 เว็บไซต์ต่อคน · ไม่ต้องใช้ token</p>
     </main></div>;
   }
 
@@ -125,13 +127,14 @@ export default function Dashboard() {
         <article className="cosmic-stat-card cosmic-stat-card-accent"><span>ACCESS STATUS</span><strong><ShieldCheck size={26} /> Safe</strong><small>ข้อมูลแยกตามบัญชีเจ้าของ</small></article>
       </section>
 
-      <section className="cosmic-panel cosmic-create-panel">
+      <section className={`cosmic-panel cosmic-create-panel ${siteCount >= 1 ? "is-limit-reached" : ""}`}>
         <div className="cosmic-panel-heading"><div><span className="cosmic-section-kicker">NEW STAR</span><h2>สร้างเว็บไซต์ความทรงจำ</h2><p>กำหนดชื่อและลิงก์เฉพาะของเรื่องราวนี้</p></div><span className="cosmic-panel-icon"><Plus size={20} /></span></div>
         <form className="cosmic-create-form" onSubmit={create}>
           <label>ชื่อเว็บไซต์<input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="เช่น ความทรงจำของเรา" maxLength={160} /></label>
           <label>ชื่อลิงก์<span className="cosmic-slug-input"><i>/site/</i><input value={slug} onChange={(event) => setSlug(event.target.value.replace(/[^a-zA-Z0-9-]/g, "").toLowerCase())} placeholder="our-memory" maxLength={120} /></span><small>ใช้ตัวอักษรอังกฤษ ตัวเลข และขีดกลาง</small></label>
-          <button className="cosmic-primary-button" disabled={!title.trim() || !slug.trim() || createMutation.isPending}>{createMutation.isPending ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}สร้างดวงดาวใหม่</button>
+          <button className="cosmic-primary-button" disabled={siteCount >= 1 || !title.trim() || !slug.trim() || createMutation.isPending}>{createMutation.isPending ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}{siteCount >= 1 ? "ใช้สิทธิ์เว็บไซต์ครบแล้ว" : "สร้างดวงดาวใหม่"}</button>
         </form>
+        {siteCount >= 1 && <p className="cosmic-limit-note"><ShieldCheck size={16} /> แพ็กเกจฟรีจำกัด 1 เว็บไซต์ต่อบัญชี คุณสามารถเข้าไปจัดการเว็บไซต์เดิมได้จากรายการด้านล่าง</p>}
         {error && <p className="cosmic-status cosmic-status-error" role="alert">{error}</p>}
       </section>
 

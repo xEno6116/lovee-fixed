@@ -113,6 +113,9 @@ export const siteRouter = router({
         try {
           return await createSiteForOwner(ctx.user.id, input);
         } catch (error) {
+          if (error instanceof Error && /owner site limit/i.test(error.message)) {
+            throw new TRPCError({ code: "FORBIDDEN", message: "บัญชีนี้มีเว็บไซต์ฟรีครบ 1 เว็บแล้ว" });
+          }
           if (error instanceof Error && /duplicate|unique/i.test(error.message)) {
             throw new TRPCError({ code: "CONFLICT", message: "ชื่อลิงก์นี้ถูกใช้งานแล้ว กรุณาเลือกชื่อใหม่" });
           }
